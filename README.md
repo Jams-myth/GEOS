@@ -1,21 +1,70 @@
 # SEO/GEO Content Pipeline
 
-An end-to-end autonomous content pipeline that ingests trending topics, generates SEO/GEO-optimised articles, publishes them to a Next.js/Vercel site backed by Supabase, indexes them across search engines, and self-improves based on weekly performance data — with mandatory human approval gates on all changes to live content. Built for Joseph (Evernu, Robur & Fides). Pipeline orchestration via Inngest; article generation via Claude Sonnet; editorial review via Gemini 2.5 Pro.
+An end-to-end autonomous content pipeline that ingests trending topics, generates SEO/GEO-optimised articles, publishes them to a Next.js/Vercel site backed by Supabase, indexes them across search engines, and self-improves based on weekly performance data — with mandatory human approval gates on all changes to live content. Built for Joseph (Evernu, Robur & Fides). Pipeline orchestration via Inngest; article generation via Claude Sonnet 4.5; editorial review via Gemini 2.5 Pro.
 
-**Status: Task 0 complete — framework established.**
+**Status: Task 1 complete — foundation code built.**
 
 ---
 
-## Shared secrets
+## Local Development
 
-Before first deploy, the following value must be set to the **same string** in both the pipeline environment and the live site environment:
+```bash
+pnpm install
+cp .env.example .env.local
+# Fill in API keys
 
-| Pipeline env var | Live site env var |
-|---|---|
-| `VERCEL_REVALIDATE_SECRET` | `REVALIDATE_SECRET` |
+# Generate Supabase types (requires live Supabase project with migrations applied)
+pnpm db:types
 
-Generate with: `openssl rand -hex 32`
+# Verify framework file is in place
+ls prompts/writer-system.md   # MUST exist before running functions
 
-The Supabase URL and anon key must also match — both environments point to the same Supabase project.
+# Run Next.js dev server
+pnpm dev
+```
 
-See PRD Section 9 for the full shared secrets table and Section 16 for all required environment variables.
+In a second terminal:
+```bash
+npx inngest-cli@latest dev
+```
+
+Inngest dev UI at `http://localhost:8288`.
+
+For Discord testing locally: `ngrok http 3000` and point Discord's interactions URL at the tunnel.
+
+---
+
+## Shared Secrets
+
+Two values must match exactly across pipeline and live site environments:
+
+| Pipeline env var | Live site env var | Must match? |
+|---|---|---|
+| `VERCEL_REVALIDATE_SECRET` | `REVALIDATE_SECRET` | **Yes — same value** |
+| `SUPABASE_URL` | `NEXT_PUBLIC_SUPABASE_URL` | **Yes — same project** |
+| `SUPABASE_ANON_KEY` | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes — same key** |
+
+Generate the revalidate secret: `openssl rand -hex 32`
+
+See `LIVE_SITE_PATCH.md` for the complete live site setup checklist.
+
+---
+
+## Database Setup
+
+1. Create a Supabase project at supabase.com
+2. Link the project: `pnpm supabase link --project-ref <your-project-ref>`
+3. Apply migrations: `pnpm db:migrate`
+4. Generate TypeScript types: `pnpm db:types`
+
+See `db/migrations/README.md` for details.
+
+---
+
+## Running Tests
+
+```bash
+pnpm test
+```
+
+Runs the meta-block parser unit tests using Node's built-in test runner.

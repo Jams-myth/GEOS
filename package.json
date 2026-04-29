@@ -1,0 +1,40 @@
+{
+  "name": "seo-geo-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "tsx --test lib/parsing/meta-block.test.ts",
+    "db:migrate": "supabase db push",
+    "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID --schema public > lib/db/types.generated.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.105.1",
+    "discord-interactions": "^4.4.0",
+    "googleapis": "^171.4.0",
+    "inngest": "^4.2.5",
+    "next": "16.2.4",
+    "openai": "^6.35.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "resend": "^6.12.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "supabase": "^2.95.6",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}
