@@ -1,9 +1,9 @@
 import { serve } from "inngest/next";
-import type { InngestFunction } from "inngest";
 import { inngest } from "../../../inngest/client";
+import { topicDiscovery } from "../../../inngest/functions/topic-discovery";
+import { generateArticle } from "../../../inngest/functions/generate-article";
 
-// Functions will be registered here in Task 2
-const functions: InngestFunction.Like[] = [];
+const functions = [topicDiscovery, generateArticle];
 
 export const { GET, POST, PUT } = serve({
   client: inngest,

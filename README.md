@@ -2,7 +2,7 @@
 
 An end-to-end autonomous content pipeline that ingests trending topics, generates SEO/GEO-optimised articles, publishes them to a Next.js/Vercel site backed by Supabase, indexes them across search engines, and self-improves based on weekly performance data — with mandatory human approval gates on all changes to live content. Built for Joseph (Evernu, Robur & Fides). Pipeline orchestration via Inngest; article generation via Claude Sonnet 4.5; editorial review via Gemini 2.5 Pro.
 
-**Status: Task 1 complete — foundation code built.**
+**Status: Task 2 complete — pipeline core built.**
 
 ---
 
@@ -58,6 +58,28 @@ See `LIVE_SITE_PATCH.md` for the complete live site setup checklist.
 4. Generate TypeScript types: `pnpm db:types`
 
 See `db/migrations/README.md` for details.
+
+---
+
+## Testing the pipeline
+
+Start the dev server and Inngest dev UI:
+```bash
+pnpm dev
+# In a second terminal:
+npx inngest-cli@latest dev
+```
+
+Trigger an article generation manually (without waiting for the topic discovery cron):
+```bash
+pnpm tsx scripts/trigger-test.ts \
+  --headline "Mounjaro UK: Complete Guide" \
+  --urls "https://www.nhs.uk/medicines/tirzepatide/,https://www.bbc.co.uk/news/health" \
+  --site-id "<your-site-uuid>" \
+  --keyword "mounjaro uk"
+```
+
+View the step trace at http://localhost:8288.
 
 ---
 
