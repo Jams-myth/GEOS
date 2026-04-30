@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./models";
 import { loadPrompt } from "./prompt-loader";
+import { withRetry } from "../util/retry";
+import { logTokenUsage } from "../cost/tracker";
 
 export interface ScrapeResult {
   url: string;
@@ -75,22 +77,36 @@ ${internalLinksSection}
 ${scrapeContent}`;
 }
 
-export async function generateWithClaude(input: GenerateInput): Promise<string> {
+export async function generateWithClaude(
+  input: GenerateInput,
+  articleId?: string
+): Promise<string> {
   const systemPrompt = await loadPrompt("writer-system.md");
   const userPrompt = buildUserPrompt(input);
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const response = await client.messages.create({
-    model: MODELS.WRITER,
-    system: systemPrompt,
-    max_tokens: 8192,
-    messages: [{ role: "user", content: userPrompt }],
-  });
+  return withRetry(async () => {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await client.messages.create({
+      model: MODELS.WRITER,
+      system: systemPrompt,
+      max_tokens: 8192,
+      messages: [{ role: "user", content: userPrompt }],
+    });
 
-  return response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("");
+    logTokenUsage({
+      articleId,
+      functionName: "generate-article",
+      stepName: "generate-draft",
+      model: MODELS.WRITER,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    });
+
+    return response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("");
+  });
 }
 
 export interface RevisionInput {
@@ -102,7 +118,10 @@ export interface RevisionInput {
   };
 }
 
-export async function reviseWithClaude(input: RevisionInput): Promise<string> {
+export async function reviseWithClaude(
+  input: RevisionInput,
+  articleId?: string
+): Promise<string> {
   const systemPrompt = await loadPrompt("writer-system.md");
 
   const userPrompt = `You are revising an article draft based on editorial feedback. Apply all revision notes below to the draft while maintaining full compliance with your system prompt directives.
@@ -124,16 +143,27 @@ Brand Voice: ${input.originalInput.brandVoice}
 
 Produce the complete revised article. Output begins at the META BLOCK and ends at the Author Bio.`;
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const response = await client.messages.create({
-    model: MODELS.WRITER,
-    system: systemPrompt,
-    max_tokens: 8192,
-    messages: [{ role: "user", content: userPrompt }],
-  });
+  return withRetry(async () => {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await client.messages.create({
+      model: MODELS.WRITER,
+      system: systemPrompt,
+      max_tokens: 8192,
+      messages: [{ role: "user", content: userPrompt }],
+    });
 
-  return response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("");
+    logTokenUsage({
+      articleId,
+      functionName: "generate-article",
+      stepName: "revise",
+      model: MODELS.WRITER,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    });
+
+    return response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("");
+  });
 }

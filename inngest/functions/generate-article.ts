@@ -117,7 +117,7 @@ export const generateArticle = inngest.createFunction(
         const { data: siteData, error: siteError } = await db
           .from("sites")
           .select(
-            "id, name, domain, brand_voice, default_author_jsonb, structure_template_jsonb, indexing_adapters, notification_config_jsonb, approval_config_jsonb"
+            "id, name, domain, brand_voice, default_author_jsonb, structure_template_jsonb, indexing_adapters, notification_config_jsonb, approval_config_jsonb, monthly_cost_cap_usd"
           )
           .eq("id", event.data.siteId)
           .single();
@@ -136,6 +136,32 @@ export const generateArticle = inngest.createFunction(
         return { site: siteData, keywordCluster: kwData ?? null };
       }
     );
+
+    // ─── Step 1b: Monthly cost cap preflight ─────────────────────────────────
+    if (site.monthly_cost_cap_usd != null) {
+      const capExceeded = await step.run(`check-cost-cap-${articleId}`, async () => {
+        const db = getDb();
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        const { data } = await db
+          .from("token_usage_logs")
+          .select("cost_usd")
+          .gte("created_at", startOfMonth.toISOString());
+
+        const monthlySpend = (data ?? []).reduce((s, r) => s + Number(r.cost_usd), 0);
+        return monthlySpend >= site.monthly_cost_cap_usd!;
+      });
+
+      if (capExceeded) {
+        return {
+          status: "skipped",
+          reason: "monthly_cost_cap_exceeded",
+          siteId: event.data.siteId,
+        };
+      }
+    }
 
     // ─── Step 2: Scrape sources ───────────────────────────────────────────────
     const scrapes = await step.run(`scrape-sources-${articleId}`, async () => {
@@ -166,7 +192,7 @@ export const generateArticle = inngest.createFunction(
     };
 
     const rawMarkdown = await step.run(`generate-draft-${articleId}`, async () => {
-      return generateWithClaude(generateInput);
+      return generateWithClaude(generateInput, articleId);
     });
 
     // ─── Step 5: Parse meta block ─────────────────────────────────────────────
@@ -176,7 +202,7 @@ export const generateArticle = inngest.createFunction(
 
     // ─── Step 6: Editor review 1 ─────────────────────────────────────────────
     const editorResult1 = await step.run(`editor-review-1-${articleId}`, async () => {
-      return reviewWithGemini(parsedDraft);
+      return reviewWithGemini(parsedDraft, articleId);
     });
 
     // Placeholder check after first review
@@ -206,7 +232,7 @@ export const generateArticle = inngest.createFunction(
       };
 
       currentMarkdown = await step.run(`revise-1-${articleId}`, async () => {
-        return reviseWithClaude(revisionInput1);
+        return reviseWithClaude(revisionInput1, articleId);
       });
 
       currentParsed = await step.run(`parse-meta-block-rev1-${articleId}`, async () => {
@@ -214,7 +240,7 @@ export const generateArticle = inngest.createFunction(
       });
 
       currentEditorResult = await step.run(`editor-review-2-${articleId}`, async () => {
-        return reviewWithGemini(currentParsed);
+        return reviewWithGemini(currentParsed, articleId);
       });
 
       // Placeholder check after revision 1
@@ -238,7 +264,7 @@ export const generateArticle = inngest.createFunction(
         };
 
         currentMarkdown = await step.run(`revise-2-${articleId}`, async () => {
-          return reviseWithClaude(revisionInput2);
+          return reviseWithClaude(revisionInput2, articleId);
         });
 
         currentParsed = await step.run(`parse-meta-block-rev2-${articleId}`, async () => {
@@ -246,7 +272,7 @@ export const generateArticle = inngest.createFunction(
         });
 
         currentEditorResult = await step.run(`editor-review-3-${articleId}`, async () => {
-          return reviewWithGemini(currentParsed);
+          return reviewWithGemini(currentParsed, articleId);
         });
 
         // Placeholder check after revision 2
@@ -287,6 +313,50 @@ export const generateArticle = inngest.createFunction(
           return { status: "manual_review_required", reason: "failed_after_2_revisions" };
         }
       }
+    }
+
+    // ─── Step 9b: Semantic duplicate check via pgvector ──────────────────────
+    const isDuplicate = await step.run(`check-duplicate-${articleId}`, async () => {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) return false; // Skip if OpenAI not configured
+
+      const OpenAI = (await import("openai")).default;
+      const client = new OpenAI({ apiKey });
+
+      // Embed the first 2000 chars of the final body to keep token cost low
+      const textToEmbed = currentParsed.body_md.slice(0, 2000);
+      const embeddingResponse = await client.embeddings.create({
+        model: "text-embedding-3-small",
+        input: textToEmbed,
+      });
+      const embedding = embeddingResponse.data[0].embedding;
+
+      const db = getDb();
+      // Store embedding on the article row (upsert-safe — article may not exist yet)
+      // We store as a JSON string; the DB column is vector(1536)
+      await db
+        .from("articles")
+        .update({ body_embedding: JSON.stringify(embedding) })
+        .eq("id", articleId);
+
+      // Check for near-duplicate articles (cosine similarity > 0.9)
+      const { data: matches } = await db.rpc("match_articles", {
+        query_embedding: JSON.stringify(embedding),
+        match_threshold: 0.9,
+        match_count: 1,
+        site_id_filter: event.data.siteId,
+      });
+
+      // Exclude self from results
+      return (matches ?? []).some((m: { id: string }) => m.id !== articleId);
+    });
+
+    if (isDuplicate) {
+      return {
+        status: "skipped",
+        reason: "semantic_duplicate_detected",
+        articleId,
+      };
     }
 
     // ─── Step 10: Generate and store featured image ───────────────────────────

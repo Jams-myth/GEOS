@@ -2,7 +2,7 @@
 
 An end-to-end autonomous content pipeline that ingests trending topics, generates SEO/GEO-optimised articles, publishes them to a Next.js/Vercel site backed by Supabase, indexes them across search engines, and self-improves based on weekly performance data — with mandatory human approval gates on all changes to live content. Built for Joseph (Evernu, Robur & Fides). Pipeline orchestration via Inngest; article generation via Claude Sonnet 4.5; editorial review via Gemini 2.5 Pro.
 
-**Status: Task 4 complete — approval system live.**
+**Status: Task 5 complete — hardening live.**
 
 ---
 
@@ -16,6 +16,32 @@ The pipeline dashboard runs at the same Next.js URL, protected by a shared passw
 | `/assessments` | Weekly assessment history with delta charts (position + clicks) |
 | `/improvements` | All improvement proposals filterable by status |
 | `/improvements/:id` | Diff viewer, change summary, and Approve / Approve with Edits / Reject buttons |
+| `/costs` | LLM cost dashboard — spend by model, by day, and by article |
+
+---
+
+## Hardening Features (Task 5)
+
+- **Automatic database pruning** — `prune-database` Inngest cron (Sundays 03:00) purges stale rows per retention policy (see `inngest/functions/prune-database.ts`)
+- **Retry with exponential backoff** — all external API calls wrapped with `withRetry` (3 retries, 500ms base, 30s max, ±20% jitter) via `lib/util/retry.ts`
+- **Per-call token cost tracking** — Claude and Gemini usage logged to `token_usage_logs` after every call; visible at `/costs`
+- **Additional topic sources** — X (Twitter) v2 search and GDELT 2.0 article list wired into topic-discovery; configure via `structure_template_jsonb.topic_sources`
+- **Monthly cost cap** — set `sites.monthly_cost_cap_usd` to skip article generation if the month's LLM spend exceeds the cap
+- **Semantic duplicate detection** — pgvector cosine similarity check (threshold 0.9) on `text-embedding-3-small` embeddings before publishing; skips near-duplicates
+
+### New env vars (Task 5)
+
+| Var | Required | Purpose |
+|---|---|---|
+| `X_BEARER_TOKEN` | No | X API v2 bearer token for tweet search |
+
+### New migrations
+
+| File | What it does |
+|---|---|
+| `0009_token_usage_logs.sql` | Creates `token_usage_logs` table |
+| `0010_site_cost_cap.sql` | Adds `monthly_cost_cap_usd` to `sites` |
+| `0011_article_embeddings.sql` | Enables pgvector, adds `body_embedding` to `articles`, creates `match_articles` RPC |
 
 ---
 

@@ -1,6 +1,8 @@
 import { inngest } from "../client";
 import { getDb } from "../../lib/db/client";
 import { notifyDiscord } from "../../lib/notify/discord";
+import { fetchXPosts } from "../../lib/sources/x";
+import { fetchGdeltArticles } from "../../lib/sources/gdelt";
 import type { Json } from "../../lib/db/types";
 
 interface RedditPost {
@@ -27,6 +29,8 @@ interface StructureTemplate {
   topic_sources?: {
     reddit?: string[];
     google_news_queries?: string[];
+    x_queries?: string[];
+    gdelt_queries?: string[];
   };
   target_audience?: string;
   word_count_default?: [number, number];
@@ -167,6 +171,8 @@ export const topicDiscovery = inngest.createFunction(
 
       const subreddits = structureTemplate?.topic_sources?.reddit ?? [];
       const googleNewsQueries = structureTemplate?.topic_sources?.google_news_queries ?? [];
+      const xQueries = structureTemplate?.topic_sources?.x_queries ?? [];
+      const gdeltQueries = structureTemplate?.topic_sources?.gdelt_queries ?? [];
       const keywordList = structureTemplate?.keyword_clusters ?? [];
 
       // Step 2a: Fetch Reddit posts
@@ -179,7 +185,17 @@ export const topicDiscovery = inngest.createFunction(
         return fetchGoogleNewsItems(googleNewsQueries);
       });
 
-      // Step 2c: Score, dedupe, and insert candidates
+      // Step 2c: Fetch X (Twitter) posts
+      const xPosts = await step.run(`fetch-x-posts-${siteId}`, async () => {
+        return fetchXPosts(xQueries);
+      });
+
+      // Step 2d: Fetch GDELT articles
+      const gdeltArticles = await step.run(`fetch-gdelt-${siteId}`, async () => {
+        return fetchGdeltArticles(gdeltQueries);
+      });
+
+      // Step 2e: Score, dedupe, and insert candidates
       const insertedCandidates = await step.run(`score-and-dedupe-${siteId}`, async () => {
         const db = getDb();
 
@@ -187,6 +203,8 @@ export const topicDiscovery = inngest.createFunction(
         const allCandidates: Array<{ headline: string; sourceUrl: string; engagement: number; publishedAt: string }> = [
           ...redditPosts,
           ...newsItems,
+          ...xPosts,
+          ...gdeltArticles,
         ];
 
         // Score each candidate

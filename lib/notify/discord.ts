@@ -1,3 +1,5 @@
+import { withRetry } from "../util/retry";
+
 export type DiscordNotification =
   | {
       kind: "article_published";
@@ -124,16 +126,18 @@ export async function notifyDiscord(notification: DiscordNotification): Promise<
 
   const embed = buildEmbed(notification);
 
-  const response = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ embeds: [embed] }),
-  });
+  return withRetry(async () => {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds: [embed] }),
+    });
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "(unreadable body)");
-    throw new Error(
-      `Discord webhook returned ${response.status} ${response.statusText}: ${body}`
-    );
-  }
+    if (!response.ok) {
+      const body = await response.text().catch(() => "(unreadable body)");
+      throw new Error(
+        `Discord webhook returned ${response.status} ${response.statusText}: ${body}`
+      );
+    }
+  });
 }

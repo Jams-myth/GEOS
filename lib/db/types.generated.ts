@@ -34,6 +34,7 @@ export interface Database {
           published_at: string | null;
           updated_at: string | null;
           indexing_jobs_jsonb: Json | null;
+          body_embedding: string | null; // vector(1536) serialized as string
           created_at: string | null;
         };
         Insert: {
@@ -92,6 +93,7 @@ export interface Database {
           published_at?: string | null;
           updated_at?: string | null;
           indexing_jobs_jsonb?: Json | null;
+          body_embedding?: string | null;
           created_at?: string | null;
         };
         Relationships: [];
@@ -109,6 +111,7 @@ export interface Database {
           default_author_jsonb: Json | null;
           notification_config_jsonb: Json | null;
           approval_config_jsonb: Json | null;
+          monthly_cost_cap_usd: number | null;
           created_at: string | null;
         };
         Insert: {
@@ -123,6 +126,7 @@ export interface Database {
           default_author_jsonb?: Json | null;
           notification_config_jsonb?: Json | null;
           approval_config_jsonb?: Json | null;
+          monthly_cost_cap_usd?: number | null;
           created_at?: string | null;
         };
         Update: {
@@ -137,6 +141,7 @@ export interface Database {
           default_author_jsonb?: Json | null;
           notification_config_jsonb?: Json | null;
           approval_config_jsonb?: Json | null;
+          monthly_cost_cap_usd?: number | null;
           created_at?: string | null;
         };
         Relationships: [];
@@ -384,6 +389,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      token_usage_logs: {
+        Row: {
+          id: string;
+          article_id: string | null;
+          function_name: string;
+          step_name: string;
+          model: string;
+          input_tokens: number;
+          output_tokens: number;
+          cost_usd: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          article_id?: string | null;
+          function_name: string;
+          step_name: string;
+          model: string;
+          input_tokens?: number;
+          output_tokens?: number;
+          cost_usd?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          article_id?: string | null;
+          function_name?: string;
+          step_name?: string;
+          model?: string;
+          input_tokens?: number;
+          output_tokens?: number;
+          cost_usd?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       api_batch_logs: {
         Row: {
           id: string;
@@ -413,7 +454,17 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      match_articles: {
+        Args: {
+          query_embedding: string;
+          match_threshold: number;
+          match_count: number;
+          site_id_filter?: string | null;
+        };
+        Returns: Array<{ id: string; title: string; similarity: number }>;
+      };
+    };
     Enums: Record<string, never>;
   };
 }

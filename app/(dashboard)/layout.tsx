@@ -24,6 +24,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             Improvements
           </Link>
+          <Link
+            href="/costs"
+            className="text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+          >
+            Costs
+          </Link>
         </div>
       </nav>
       <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>

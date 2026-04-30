@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { MODELS } from "./models";
 import { loadPrompt } from "./prompt-loader";
+import { withRetry } from "../util/retry";
+import { logTokenUsage } from "../cost/tracker";
 import type { ParsedDraft } from "../parsing/meta-block";
 
 const EditorScoresSchema = z.object({
@@ -35,20 +37,11 @@ const EditorResultSchema = z.object({
 
 export type EditorResult = z.infer<typeof EditorResultSchema>;
 
-export async function reviewWithGemini(draft: ParsedDraft): Promise<EditorResult> {
+export async function reviewWithGemini(
+  draft: ParsedDraft,
+  articleId?: string
+): Promise<EditorResult> {
   const systemPrompt = await loadPrompt("editor-rubric.md");
-
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) throw new Error("GOOGLE_AI_API_KEY is not set");
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: MODELS.EDITOR,
-    systemInstruction: systemPrompt,
-    generationConfig: {
-      responseMimeType: "application/json",
-    },
-  });
 
   const prompt = `Review the following article draft. The META BLOCK has already been parsed upstream — meta_block_ok is ${draft.ok ? "true" : "false"}.
 
@@ -62,15 +55,38 @@ META BLOCK PARSE ERRORS: ${draft.errors.length > 0 ? draft.errors.join("; ") : "
 
 ${draft.body_md}`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  return withRetry(async () => {
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    if (!apiKey) throw new Error("GOOGLE_AI_API_KEY is not set");
 
-  const parsed = JSON.parse(text) as unknown;
-  const validated = EditorResultSchema.safeParse(parsed);
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: MODELS.EDITOR,
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    });
 
-  if (!validated.success) {
-    throw new Error(`Gemini returned invalid editor result structure: ${validated.error.message}`);
-  }
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
-  return validated.data;
+    logTokenUsage({
+      articleId,
+      functionName: "generate-article",
+      stepName: "editor-review",
+      model: MODELS.EDITOR,
+      inputTokens: result.response.usageMetadata?.promptTokenCount ?? 0,
+      outputTokens: result.response.usageMetadata?.candidatesTokenCount ?? 0,
+    });
+
+    const parsed = JSON.parse(text) as unknown;
+    const validated = EditorResultSchema.safeParse(parsed);
+
+    if (!validated.success) {
+      throw new Error(`Gemini returned invalid editor result structure: ${validated.error.message}`);
+    }
+
+    return validated.data;
+  });
 }

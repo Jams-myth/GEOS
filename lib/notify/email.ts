@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { withRetry } from "../util/retry";
 
 const FROM_ADDRESS = "pipeline@noreply.evernu.co.uk";
 
@@ -19,8 +20,6 @@ export async function sendArticlePublishedEmail(params: {
   scores: Record<string, number>;
   siteId: string;
 }): Promise<void> {
-  const resend = getResend();
-
   const scoreRows = Object.entries(params.scores)
     .map(
       ([k, v]) =>
@@ -49,16 +48,19 @@ export async function sendArticlePublishedEmail(params: {
 </body>
 </html>`;
 
-  const { error } = await resend.emails.send({
-    from: FROM_ADDRESS,
-    to: params.to,
-    subject: `Published: ${params.articleTitle}`,
-    html,
-  });
+  return withRetry(async () => {
+    const resend = getResend();
+    const { error } = await resend.emails.send({
+      from: FROM_ADDRESS,
+      to: params.to,
+      subject: `Published: ${params.articleTitle}`,
+      html,
+    });
 
-  if (error) {
-    throw new Error(`Failed to send article published email: ${error.message}`);
-  }
+    if (error) {
+      throw new Error(`Failed to send article published email: ${error.message}`);
+    }
+  });
 }
 
 export async function sendManualReviewEmail(params: {
@@ -68,8 +70,6 @@ export async function sendManualReviewEmail(params: {
   revisionNotes: string[];
   reason: string;
 }): Promise<void> {
-  const resend = getResend();
-
   const noteItems = params.revisionNotes
     .map((n, i) => `<li style="margin-bottom:8px;">${i + 1}. ${n}</li>`)
     .join("");
@@ -89,14 +89,17 @@ export async function sendManualReviewEmail(params: {
 </body>
 </html>`;
 
-  const { error } = await resend.emails.send({
-    from: FROM_ADDRESS,
-    to: params.to,
-    subject: `Manual Review Required: ${params.headline}`,
-    html,
-  });
+  return withRetry(async () => {
+    const resend = getResend();
+    const { error } = await resend.emails.send({
+      from: FROM_ADDRESS,
+      to: params.to,
+      subject: `Manual Review Required: ${params.headline}`,
+      html,
+    });
 
-  if (error) {
-    throw new Error(`Failed to send manual review email: ${error.message}`);
-  }
+    if (error) {
+      throw new Error(`Failed to send manual review email: ${error.message}`);
+    }
+  });
 }

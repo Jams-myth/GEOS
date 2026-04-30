@@ -56,6 +56,9 @@ const envSchema = z.object({
   // Dashboard base URL (for magic-link generation)
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 
+  // X (Twitter) API v2 — optional additional topic source
+  X_BEARER_TOKEN: z.string().optional(),
+
   // Image generation
   FAL_KEY: z.string().min(1),
 });
