@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { z } from "zod";
 import { MODELS } from "../llm/models";
 import type { ProposedChanges, GeminiReview } from "./types";
@@ -30,23 +30,16 @@ Return exactly this JSON shape, no other text:
 
 Approve if there are zero hard failures. A patch with stylistic differences or minor redundancy should still be approved.`;
 
-/**
- * Gemini sanity-check on the patch proposal before the approval request is sent.
- * Same hard-checks as Stage 3 (Gemini review of article drafts) but adapted for patches.
- */
-export async function reviewPatchWithGemini(proposal: ProposedChanges): Promise<GeminiReview> {
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) throw new Error("GOOGLE_AI_API_KEY is not set");
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: MODELS.EDITOR,
-    systemInstruction: SYSTEM_PROMPT,
-    generationConfig: {
-      responseMimeType: "application/json",
-    },
+function getClient(): OpenAI {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey,
   });
+}
 
+export async function reviewPatchWithGemini(proposal: ProposedChanges): Promise<GeminiReview> {
   const prompt = `## Improvement Patch Proposal
 
 article_id: ${proposal.article_id}
@@ -69,21 +62,27 @@ ${proposal.changes
 
 ${proposal.notes || "(none)"}`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().trim();
-  const json = text.replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+  const response = await getClient().chat.completions.create({
+    model: MODELS.EDITOR,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ],
+  });
+
+  const text = (response.choices[0]?.message?.content ?? "{}").trim();
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(json);
+    parsed = JSON.parse(text);
   } catch {
-    // If Gemini returns garbage, default-approve with a low confidence warning
-    return { approved: false, confidence: 0, issues: ["Gemini returned non-JSON response"], notes: text.slice(0, 200) };
+    return { approved: false, confidence: 0, issues: ["Reviewer returned non-JSON response"], notes: text.slice(0, 200) };
   }
 
   const validated = GeminiReviewSchema.safeParse(parsed);
   if (!validated.success) {
-    return { approved: false, confidence: 0, issues: ["Gemini review schema invalid"], notes: validated.error.message };
+    return { approved: false, confidence: 0, issues: ["Reviewer schema invalid"], notes: validated.error.message };
   }
 
   return validated.data;

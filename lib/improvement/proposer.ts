@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { z } from "zod";
 import { getDb } from "../db/client";
 import { loadPrompt } from "../llm/prompt-loader";
@@ -31,6 +31,15 @@ const ProposedChangesSchema = z.object({
   gemini_review_required: z.boolean(),
   notes: z.string(),
 });
+
+function getClient(): OpenAI {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey,
+  });
+}
 
 export async function generateImprovementProposal(
   articleId: string,
@@ -101,26 +110,21 @@ ${JSON.stringify(assessment.ai_citations_jsonb, null, 2)}
 ### Recommendations from Assessment Aggregator
 ${JSON.stringify(assessment.recommendations_jsonb, null, 2)}`;
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const response = await client.messages.create({
+  const response = await getClient().chat.completions.create({
     model: MODELS.WRITER,
-    system: systemPrompt,
     max_tokens: 4096,
-    messages: [{ role: "user", content: userPrompt }],
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
   });
 
-  const rawText = response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
-
-  // Strip markdown fences if present
-  const json = rawText.replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+  const rawText = (response.choices[0]?.message?.content ?? "").trim();
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(json);
+    parsed = JSON.parse(rawText);
   } catch {
     throw new Error(`Improvement planner returned invalid JSON: ${rawText.slice(0, 200)}`);
   }
@@ -132,7 +136,6 @@ ${JSON.stringify(assessment.recommendations_jsonb, null, 2)}`;
     );
   }
 
-  // Ensure article_version_at_proposal captures the current version at generation time
   return {
     ...validated.data,
     article_id: articleId,

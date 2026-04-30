@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { z } from "zod";
 import { MODELS } from "./models";
 import { loadPrompt } from "./prompt-loader";
@@ -37,6 +37,15 @@ const EditorResultSchema = z.object({
 
 export type EditorResult = z.infer<typeof EditorResultSchema>;
 
+function getClient(): OpenAI {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey,
+  });
+}
+
 export async function reviewWithGemini(
   draft: ParsedDraft,
   articleId?: string
@@ -56,35 +65,30 @@ META BLOCK PARSE ERRORS: ${draft.errors.length > 0 ? draft.errors.join("; ") : "
 ${draft.body_md}`;
 
   return withRetry(async () => {
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
-    if (!apiKey) throw new Error("GOOGLE_AI_API_KEY is not set");
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
+    const response = await getClient().chat.completions.create({
       model: MODELS.EDITOR,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
     });
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
 
     logTokenUsage({
       articleId,
       functionName: "generate-article",
       stepName: "editor-review",
       model: MODELS.EDITOR,
-      inputTokens: result.response.usageMetadata?.promptTokenCount ?? 0,
-      outputTokens: result.response.usageMetadata?.candidatesTokenCount ?? 0,
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
     });
 
+    const text = response.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(text) as unknown;
     const validated = EditorResultSchema.safeParse(parsed);
 
     if (!validated.success) {
-      throw new Error(`Gemini returned invalid editor result structure: ${validated.error.message}`);
+      throw new Error(`Editor returned invalid result structure: ${validated.error.message}`);
     }
 
     return validated.data;

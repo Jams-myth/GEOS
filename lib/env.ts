@@ -17,10 +17,13 @@ const envSchema = z.object({
   INNGEST_SIGNING_KEY: z.string().min(1),
 
   // LLMs
-  ANTHROPIC_API_KEY: z.string().min(1),
-  GOOGLE_AI_API_KEY: z.string().min(1),
-  OPENAI_API_KEY: z.string().min(1),
-  PERPLEXITY_API_KEY: z.string().min(1),
+  OPENROUTER_API_KEY: z.string().min(1),
+  // Google AI SDK still used for grounding in lib/citation/gemini.ts
+  GOOGLE_AI_API_KEY: z.string().optional(),
+  // Legacy keys — no longer required for core pipeline
+  ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  PERPLEXITY_API_KEY: z.string().optional(),
 
   // Scraping
   FIRECRAWL_API_KEY: z.string().min(1),

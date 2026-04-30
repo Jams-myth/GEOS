@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { MODELS } from "./models";
 import { loadPrompt } from "./prompt-loader";
 import { withRetry } from "../util/retry";
@@ -77,6 +77,15 @@ ${internalLinksSection}
 ${scrapeContent}`;
 }
 
+function getClient(): OpenAI {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey,
+  });
+}
+
 export async function generateWithClaude(
   input: GenerateInput,
   articleId?: string
@@ -85,12 +94,13 @@ export async function generateWithClaude(
   const userPrompt = buildUserPrompt(input);
 
   return withRetry(async () => {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
+    const response = await getClient().chat.completions.create({
       model: MODELS.WRITER,
-      system: systemPrompt,
       max_tokens: 8192,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
     });
 
     logTokenUsage({
@@ -98,14 +108,11 @@ export async function generateWithClaude(
       functionName: "generate-article",
       stepName: "generate-draft",
       model: MODELS.WRITER,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
     });
 
-    return response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
+    return response.choices[0]?.message?.content ?? "";
   });
 }
 
@@ -144,12 +151,13 @@ Brand Voice: ${input.originalInput.brandVoice}
 Produce the complete revised article. Output begins at the META BLOCK and ends at the Author Bio.`;
 
   return withRetry(async () => {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
+    const response = await getClient().chat.completions.create({
       model: MODELS.WRITER,
-      system: systemPrompt,
       max_tokens: 8192,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
     });
 
     logTokenUsage({
@@ -157,13 +165,10 @@ Produce the complete revised article. Output begins at the META BLOCK and ends a
       functionName: "generate-article",
       stepName: "revise",
       model: MODELS.WRITER,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
     });
 
-    return response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
+    return response.choices[0]?.message?.content ?? "";
   });
 }

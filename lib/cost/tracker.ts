@@ -1,18 +1,18 @@
 import { getDb } from "../db/client";
 
-// Pricing per 1M tokens (USD). Updated 2025 — adjust if rates change.
+// Pricing per 1M tokens (USD) — OpenRouter model IDs. Updated 2025 — adjust if rates change.
 const INPUT_PRICE_PER_M: Record<string, number> = {
-  "claude-sonnet-4-5": 3.0,
-  "gemini-2.5-pro": 1.25,
-  "gpt-4o": 2.5,
-  "sonar-pro": 1.0,
+  "anthropic/claude-sonnet-4-5": 3.0,
+  "google/gemini-2.5-pro-preview": 1.25,
+  "openai/gpt-4o": 2.5,
+  "perplexity/sonar-pro": 1.0,
 };
 
 const OUTPUT_PRICE_PER_M: Record<string, number> = {
-  "claude-sonnet-4-5": 15.0,
-  "gemini-2.5-pro": 10.0,
-  "gpt-4o": 10.0,
-  "sonar-pro": 1.0,
+  "anthropic/claude-sonnet-4-5": 15.0,
+  "google/gemini-2.5-pro-preview": 10.0,
+  "openai/gpt-4o": 10.0,
+  "perplexity/sonar-pro": 1.0,
 };
 
 export interface TokenUsageParams {
