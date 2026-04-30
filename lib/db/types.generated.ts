@@ -369,6 +369,21 @@ export interface Database {
         };
         Relationships: [];
       };
+      consumed_approval_tokens: {
+        Row: {
+          token: string;
+          used_at: string;
+        };
+        Insert: {
+          token: string;
+          used_at?: string;
+        };
+        Update: {
+          token?: string;
+          used_at?: string;
+        };
+        Relationships: [];
+      };
       api_batch_logs: {
         Row: {
           id: string;

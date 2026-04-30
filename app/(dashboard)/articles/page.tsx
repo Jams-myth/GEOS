@@ -1,0 +1,145 @@
+import { getDb } from "../../../lib/db/client";
+import Link from "next/link";
+
+interface SerpData {
+  position?: number | null;
+}
+
+interface CitationData {
+  perplexity?: { cited?: boolean };
+  openai?: { cited?: boolean };
+  gemini?: { cited?: boolean };
+}
+
+async function getArticles() {
+  const db = getDb();
+
+  const { data: articles } = await db
+    .from("articles")
+    .select("id, title, primary_keyword, status, published_at, url")
+    .order("published_at", { ascending: false });
+
+  if (!articles || articles.length === 0) return [];
+
+  const { data: latestAssessments } = await db
+    .from("assessments")
+    .select("article_id, serp_positions_jsonb, ai_citations_jsonb, week_of")
+    .in("article_id", articles.map((a) => a.id))
+    .order("week_of", { ascending: false });
+
+  // Keep only the most recent assessment per article
+  const latestMap = new Map<string, { serp: SerpData; citations: CitationData }>();
+  for (const a of latestAssessments ?? []) {
+    if (!a.article_id || latestMap.has(a.article_id)) continue;
+    latestMap.set(a.article_id, {
+      serp: (a.serp_positions_jsonb as SerpData) ?? {},
+      citations: (a.ai_citations_jsonb as CitationData) ?? {},
+    });
+  }
+
+  return articles.map((article) => {
+    const assessment = latestMap.get(article.id);
+    const citedCount = assessment
+      ? [assessment.citations.perplexity, assessment.citations.openai, assessment.citations.gemini].filter(
+          (c) => c?.cited
+        ).length
+      : null;
+
+    return {
+      ...article,
+      position: assessment?.serp?.position ?? null,
+      citedCount,
+    };
+  });
+}
+
+export default async function ArticlesPage() {
+  const articles = await getArticles();
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Articles</h1>
+        <span className="text-sm text-gray-500">{articles.length} articles</span>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50 text-gray-600">
+              <th className="text-left font-medium px-5 py-3">Title</th>
+              <th className="text-left font-medium px-5 py-3 w-44">Primary Keyword</th>
+              <th className="text-right font-medium px-5 py-3 w-28">Position</th>
+              <th className="text-right font-medium px-5 py-3 w-28">AI Citations</th>
+              <th className="text-left font-medium px-5 py-3 w-28">Status</th>
+              <th className="text-left font-medium px-5 py-3 w-32">Published</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {articles.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-5 py-10 text-center text-gray-400">
+                  No articles yet.
+                </td>
+              </tr>
+            )}
+            {articles.map((article) => (
+              <tr key={article.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-5 py-3">
+                  <div className="font-medium text-gray-900 leading-tight">{article.title}</div>
+                  {article.url && (
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-500 hover:underline"
+                    >
+                      {article.url}
+                    </a>
+                  )}
+                </td>
+                <td className="px-5 py-3 text-gray-600">{article.primary_keyword ?? "—"}</td>
+                <td className="px-5 py-3 text-right text-gray-700 tabular-nums">
+                  {article.position != null ? article.position.toFixed(1) : "—"}
+                </td>
+                <td className="px-5 py-3 text-right">
+                  {article.citedCount != null ? (
+                    <span
+                      className={`font-medium ${article.citedCount > 0 ? "text-green-600" : "text-gray-400"}`}
+                    >
+                      {article.citedCount}/3
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
+                <td className="px-5 py-3">
+                  <span
+                    className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
+                      article.status === "published"
+                        ? "bg-green-100 text-green-700"
+                        : article.status === "draft"
+                        ? "bg-yellow-100 text-yellow-700"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {article.status}
+                  </span>
+                </td>
+                <td className="px-5 py-3 text-gray-500 text-xs">
+                  {article.published_at
+                    ? new Date(article.published_at).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

@@ -2,7 +2,36 @@
 
 An end-to-end autonomous content pipeline that ingests trending topics, generates SEO/GEO-optimised articles, publishes them to a Next.js/Vercel site backed by Supabase, indexes them across search engines, and self-improves based on weekly performance data — with mandatory human approval gates on all changes to live content. Built for Joseph (Evernu, Robur & Fides). Pipeline orchestration via Inngest; article generation via Claude Sonnet 4.5; editorial review via Gemini 2.5 Pro.
 
-**Status: Task 3 complete — weekly assessment built.**
+**Status: Task 4 complete — approval system live.**
+
+---
+
+## Dashboard
+
+The pipeline dashboard runs at the same Next.js URL, protected by a shared password (`DASHBOARD_PASSWORD` env var).
+
+| Route | Description |
+|---|---|
+| `/articles` | All published articles with latest SERP position and AI citation counts |
+| `/assessments` | Weekly assessment history with delta charts (position + clicks) |
+| `/improvements` | All improvement proposals filterable by status |
+| `/improvements/:id` | Diff viewer, change summary, and Approve / Approve with Edits / Reject buttons |
+
+---
+
+## Discord Setup
+
+1. Create an application at [Discord Developer Portal](https://discord.com/developers/applications)
+2. Under **Bot**, copy the bot token → set `DISCORD_BOT_TOKEN`
+3. Under **General Information**, copy the Public Key → set `DISCORD_PUBLIC_KEY`
+4. Under **OAuth2 → Scopes**, add `bot` with `Send Messages` + `Read Message History`
+5. Invite the bot to your server and note the approval channel ID → set `DISCORD_CHANNEL_ID`
+6. Under **Interactions Endpoint URL**, set: `https://<your-domain>/api/discord/interactions`
+7. Discord will send a PING to verify the endpoint — the route handles this automatically (responds with `{ type: 1 }`)
+
+Approval buttons will appear in the configured channel whenever a new improvement proposal is generated.
+
+For local testing: `ngrok http 3000` → point the interactions URL at the ngrok tunnel.
 
 ---
 
@@ -90,3 +119,9 @@ pnpm test
 ```
 
 Runs the meta-block parser unit tests using Node's built-in test runner.
+
+```bash
+npx tsx --test lib/patch/apply.test.ts
+```
+
+Runs the patch-apply unit tests (13 tests — all patch operations).

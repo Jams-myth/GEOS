@@ -44,6 +44,17 @@ const envSchema = z.object({
 
   // Security
   APPROVAL_TOKEN_HMAC_SECRET: z.string().min(1),
+  DASHBOARD_PASSWORD: z.string().min(1),
+
+  // Discord bot (for proactive approval messages with buttons)
+  DISCORD_BOT_TOKEN: z.string().optional(),
+  DISCORD_CHANNEL_ID: z.string().optional(),
+
+  // Approval email recipient
+  NOTIFICATION_EMAIL: z.string().email().optional(),
+
+  // Dashboard base URL (for magic-link generation)
+  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 
   // Image generation
   FAL_KEY: z.string().min(1),
