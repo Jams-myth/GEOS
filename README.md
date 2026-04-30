@@ -2,7 +2,7 @@
 
 An end-to-end autonomous content pipeline that ingests trending topics, generates SEO/GEO-optimised articles, publishes them to a Next.js/Vercel site backed by Supabase, indexes them across search engines, and self-improves based on weekly performance data — with mandatory human approval gates on all changes to live content. Built for Joseph (Evernu, Robur & Fides). Pipeline orchestration via Inngest; article generation via Claude Sonnet 4.5; editorial review via Gemini 2.5 Pro.
 
-**Status: Task 2 complete — pipeline core built.**
+**Status: Task 3 complete — weekly assessment built.**
 
 ---
 

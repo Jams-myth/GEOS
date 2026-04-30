@@ -29,6 +29,14 @@ The Stage 9 patch generation system prompt for Claude.
 - **Governs:** structured JSON patch proposals (not article writing) — patch types, priority labels, and the output schema that the approval dashboard and `apply-improvement` function consume
 - **Does not reference** `writer-system.md` — this is a different task with a different output shape
 
+### `assessment-aggregator.md`
+
+The Stage 8 weekly assessment aggregation system prompt for Claude.
+
+- **Used by:** Claude during Stage 8 (weekly assessment aggregation per article)
+- **Loaded as:** system prompt by `lib/assessment/aggregator.ts`
+- **Governs:** prioritised recommendation generation from GSC/GA4/SERP/citation data
+
 ---
 
 ## How prompts are loaded
