@@ -9,9 +9,10 @@ export async function checkPerplexityCitation(
   url: string,
   keyword: string
 ): Promise<CitationResult> {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) return { cited: false, position: null };
+
   return withRetry(async () => {
-    const apiKey = process.env.PERPLEXITY_API_KEY;
-    if (!apiKey) throw new Error("PERPLEXITY_API_KEY is not set");
 
     const response = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",

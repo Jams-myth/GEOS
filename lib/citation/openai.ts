@@ -6,9 +6,10 @@ export async function checkOpenAiCitation(
   url: string,
   keyword: string
 ): Promise<CitationResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { cited: false, position: null };
+
   return withRetry(async () => {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
 
     const client = new OpenAI({ apiKey });
     const targetDomain = new URL(url).hostname;
