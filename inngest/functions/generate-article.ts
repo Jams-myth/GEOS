@@ -328,16 +328,16 @@ export const generateArticle = inngest.createFunction(
 
     // ─── Step 9b: Semantic duplicate check via pgvector ──────────────────────
     const isDuplicate = await step.run(`check-duplicate-${articleId}`, async () => {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey || apiKey.startsWith("<")) return false; // Skip if OpenAI not configured
+      const apiKey = process.env.OPENROUTER_API_KEY;
+      if (!apiKey) return false;
 
       const OpenAI = (await import("openai")).default;
-      const client = new OpenAI({ apiKey });
+      const client = new OpenAI({ apiKey, baseURL: "https://openrouter.ai/api/v1" });
 
       // Embed the first 2000 chars of the final body to keep token cost low
       const textToEmbed = currentParsed.body_md.slice(0, 2000);
       const embeddingResponse = await client.embeddings.create({
-        model: "text-embedding-3-small",
+        model: "openai/text-embedding-3-small",
         input: textToEmbed,
       });
       const embedding = embeddingResponse.data[0].embedding;
