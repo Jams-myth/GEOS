@@ -329,7 +329,7 @@ export const generateArticle = inngest.createFunction(
     // ─── Step 9b: Semantic duplicate check via pgvector ──────────────────────
     const isDuplicate = await step.run(`check-duplicate-${articleId}`, async () => {
       const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) return false; // Skip if OpenAI not configured
+      if (!apiKey || apiKey.startsWith("<")) return false; // Skip if OpenAI not configured
 
       const OpenAI = (await import("openai")).default;
       const client = new OpenAI({ apiKey });
