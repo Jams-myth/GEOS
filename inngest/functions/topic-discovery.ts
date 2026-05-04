@@ -200,12 +200,18 @@ export const topicDiscovery = inngest.createFunction(
         const db = getDb();
 
         // Merge all candidates — publishedAt is already an ISO string from step serialization
-        const allCandidates: Array<{ headline: string; sourceUrl: string; engagement: number; publishedAt: string }> = [
+        const rawCandidates: Array<{ headline: string; sourceUrl: string; engagement: number; publishedAt: string }> = [
           ...redditPosts,
           ...newsItems,
           ...xPosts,
           ...gdeltArticles,
         ];
+
+        // Filter out non-scrapeable URLs (images, videos, reddit media)
+        const UNSCRAPEBLE_PATTERNS = [/imgur\.com/, /redd\.it/, /\.jpg$/, /\.jpeg$/, /\.png$/, /\.gif$/, /\.mp4$/];
+        const allCandidates = rawCandidates.filter(
+          (c) => c.sourceUrl.startsWith("https://") && !UNSCRAPEBLE_PATTERNS.some((p) => p.test(c.sourceUrl))
+        );
 
         // Score each candidate
         const scored: ScoredCandidate[] = allCandidates.map((c) => {
