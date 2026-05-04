@@ -178,7 +178,7 @@ export const generateArticle = inngest.createFunction(
     const structureTemplate = (site.structure_template_jsonb as StructureTemplate | null) ?? {};
 
     const generateInput: GenerateInput = {
-      primaryKeyword: event.data.keywordCluster,
+      primaryKeyword: keywordCluster?.primary_keyword || event.data.keywordCluster || event.data.headline,
       secondaryKeywords: keywordCluster?.related_keywords ?? [],
       targetAudience: structureTemplate.target_audience ?? "General UK adult audience",
       informationGainAsset: infoGainAsset,
