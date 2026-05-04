@@ -175,6 +175,37 @@ export const topicDiscovery = inngest.createFunction(
       const gdeltQueries = structureTemplate?.topic_sources?.gdelt_queries ?? [];
       const keywordList = structureTemplate?.keyword_clusters ?? [];
 
+      // Step 2-pre: Process target keywords — these take priority over news discovery
+      const targetKeywords = await step.run(`load-target-keywords-${siteId}`, async () => {
+        const db = getDb();
+        const { data } = await db
+          .from("target_keywords")
+          .select("id, keyword")
+          .eq("site_id", siteId)
+          .eq("status", "pending")
+          .order("created_at")
+          .limit(3); // Process up to 3 per run to avoid overloading
+        return data ?? [];
+      });
+
+      for (const kw of targetKeywords) {
+        await step.run(`mark-keyword-in-progress-${kw.id}`, async () => {
+          const db = getDb();
+          await db.from("target_keywords").update({ status: "in_progress" }).eq("id", kw.id);
+        });
+
+        await step.sendEvent(`keyword-article-${kw.id}`, {
+          name: "topic.selected",
+          data: {
+            siteId,
+            headline: kw.keyword,
+            sourceUrls: [],
+            keywordCluster: kw.keyword,
+            targetKeywordId: kw.id,
+          },
+        });
+      }
+
       // Step 2a: Fetch Reddit posts
       const redditPosts = await step.run(`fetch-reddit-${siteId}`, async () => {
         return fetchRedditPosts(subreddits);

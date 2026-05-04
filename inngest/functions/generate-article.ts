@@ -447,7 +447,22 @@ export const generateArticle = inngest.createFunction(
       });
     });
 
-    // ─── Step 12: Revalidate Vercel ───────────────────────────────────────────
+    // ─── Step 12: Mark target keyword done (if this article came from one) ──────
+    if (event.data.targetKeywordId) {
+      await step.run(`complete-target-keyword-${articleId}`, async () => {
+        const db = getDb();
+        await db
+          .from("target_keywords")
+          .update({
+            status: "done",
+            article_id: articleId,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", event.data.targetKeywordId);
+      });
+    }
+
+    // ─── Step 13: Revalidate Vercel ───────────────────────────────────────────
     // REVALIDATION — only fires on successful publish path
     await step.run(`revalidate-vercel-${articleId}`, async () => {
       await revalidateLiveSite(event.data.siteId, [
