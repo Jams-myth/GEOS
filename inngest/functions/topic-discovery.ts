@@ -150,7 +150,7 @@ export const topicDiscovery = inngest.createFunction(
   {
     id: "topic-discovery",
     concurrency: { limit: 1 },
-    triggers: [{ cron: "0 6 * * *" }, { event: "content/topic.discovery.requested" }],
+    triggers: [{ cron: "0 6 * * *" }, { cron: "0 18 * * *" }, { event: "content/topic.discovery.requested" }],
   },
   async ({ step }) => {
     // Step 1: Load all sites
