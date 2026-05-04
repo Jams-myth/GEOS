@@ -103,10 +103,11 @@ export const generateArticle = inngest.createFunction(
   },
   async ({ event, step }) => {
     // Deterministic article ID — retries hit the same upsert
-    const articleId = createHash("sha256")
+    const hash = createHash("sha256")
       .update(`${event.data.siteId}-${event.data.headline}`)
       .digest("hex")
-      .slice(0, 36);
+      .slice(0, 32);
+    const articleId = `${hash.slice(0,8)}-${hash.slice(8,12)}-${hash.slice(12,16)}-${hash.slice(16,20)}-${hash.slice(20,32)}`;
 
     // ─── Step 1: Load site config ────────────────────────────────────────────
     const { site, keywordCluster } = await step.run(
