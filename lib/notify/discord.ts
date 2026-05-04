@@ -119,9 +119,8 @@ function buildEmbed(notification: DiscordNotification): DiscordEmbed {
 export async function notifyDiscord(notification: DiscordNotification): Promise<void> {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
-    throw new Error(
-      "DISCORD_WEBHOOK_URL is not set. Add it to your .env.local before sending Discord notifications."
-    );
+    console.warn("DISCORD_WEBHOOK_URL not set — skipping Discord notification.");
+    return;
   }
 
   const embed = buildEmbed(notification);
