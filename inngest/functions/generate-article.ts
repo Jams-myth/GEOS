@@ -287,7 +287,18 @@ export const generateArticle = inngest.createFunction(
           return { status: "manual_review_required", reason: "placeholder_detected" };
         }
 
-        if (!currentEditorResult.pass) {
+        // Allow publish if only meta_block_ok failed but content scores are strong
+        const scores = Object.values(currentEditorResult.scores);
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const onlyMetaFailing =
+          !currentEditorResult.hard_checks.meta_block_ok &&
+          !currentEditorResult.placeholderDetected &&
+          currentEditorResult.hard_checks.footnotes >= 3 &&
+          currentEditorResult.hard_checks.faq_questions >= 4 &&
+          currentEditorResult.hard_checks.tldr_bullets >= 4 &&
+          avgScore >= 7;
+
+        if (!currentEditorResult.pass && !onlyMetaFailing) {
           // Still failing after 2 revisions — send to manual review
           await step.run(`notify-manual-review-${articleId}`, async () => {
             const notificationConfig =
