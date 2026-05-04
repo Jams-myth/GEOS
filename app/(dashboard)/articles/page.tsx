@@ -86,13 +86,15 @@ export default async function ArticlesPage() {
             {articles.map((article) => (
               <tr key={article.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-5 py-3">
-                  <div className="font-medium text-gray-900 leading-tight">{article.title}</div>
+                  <Link href={`/articles/${article.id}`} className="font-medium text-indigo-600 hover:underline leading-tight block">
+                    {article.title}
+                  </Link>
                   {article.url && (
                     <a
                       href={article.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-indigo-500 hover:underline"
+                      className="text-xs text-gray-400 hover:underline"
                     >
                       {article.url}
                     </a>
