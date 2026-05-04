@@ -267,7 +267,7 @@ export const topicDiscovery = inngest.createFunction(
           const { data: inserted, error } = await db
             .from("topic_candidates")
             .insert(inserts)
-            .select("id, headline, score");
+            .select("id, headline, score, sources_jsonb");
           if (error) throw new Error(`Failed to insert topic candidates: ${error.message}`);
           return inserted ?? [];
         }
@@ -293,8 +293,8 @@ export const topicDiscovery = inngest.createFunction(
           data: {
             siteId,
             headline: top.headline,
-            sourceUrls: [],
-            keywordCluster: "",
+            sourceUrls: (top.sources_jsonb as string[] | null) ?? [],
+            keywordCluster: keywordList[0] ?? "",
           },
         });
       } else {
