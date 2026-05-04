@@ -274,30 +274,32 @@ export const topicDiscovery = inngest.createFunction(
         return [];
       });
 
-      // Step 2d: Select or notify
-      await step.run(`select-or-notify-${siteId}`, async () => {
-        if (insertedCandidates.length === 0) return;
+      if (insertedCandidates.length === 0) continue;
 
-        if (approvalConfig.auto_publish === true) {
-          // Auto-select the highest-scoring candidate
-          const top = insertedCandidates[0];
+      if (approvalConfig.auto_publish === true) {
+        // Auto-select the highest-scoring candidate
+        const top = insertedCandidates[0];
+
+        await step.run(`select-top-candidate-${siteId}`, async () => {
           const db = getDb();
           await db
             .from("topic_candidates")
             .update({ status: "selected" })
             .eq("id", top.id);
+        });
 
-          await step.sendEvent(`topic-selected-${siteId}-${top.id}`, {
-            name: "topic.selected",
-            data: {
-              siteId,
-              headline: top.headline,
-              sourceUrls: [],
-              keywordCluster: "",
-            },
-          });
-        } else {
-          // Notify Discord with top 5 candidates for manual approval
+        await step.sendEvent(`topic-selected-${siteId}-${top.id}`, {
+          name: "topic.selected",
+          data: {
+            siteId,
+            headline: top.headline,
+            sourceUrls: [],
+            keywordCluster: "",
+          },
+        });
+      } else {
+        // Notify Discord with top 5 candidates for manual approval
+        await step.run(`notify-candidates-${siteId}`, async () => {
           const top5 = insertedCandidates.slice(0, 5).map((c) => ({
             id: c.id,
             headline: c.headline,
@@ -310,8 +312,8 @@ export const topicDiscovery = inngest.createFunction(
             siteName: site.name,
             candidates: top5,
           });
-        }
-      });
+        });
+      }
     }
 
     return { sitesProcessed: sites.length };
