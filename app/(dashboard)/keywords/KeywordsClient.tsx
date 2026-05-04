@@ -40,6 +40,15 @@ export default function KeywordsClient({
   const addKeyword = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed) return;
+
+    // Client-side duplicate check — instant, no round-trip needed
+    const normalised = trimmed.toLowerCase();
+    const duplicate = keywords.find((k) => k.keyword.toLowerCase() === normalised);
+    if (duplicate) {
+      setError(`"${duplicate.keyword}" is already in your list (${STATUS_LABELS[duplicate.status]})`);
+      return;
+    }
+
     setAdding(true);
     setError(null);
 

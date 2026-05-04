@@ -38,7 +38,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "siteId and keyword are required" }, { status: 400 });
   }
 
+  const normalised = keyword.trim().toLowerCase();
   const db = getDb();
+
+  // Check for existing keyword (case-insensitive) before hitting the unique index
+  const { data: existing } = await db
+    .from("target_keywords")
+    .select("id, keyword, status")
+    .eq("site_id", siteId)
+    .ilike("keyword", normalised)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json(
+      { error: `"${existing.keyword}" is already in your list (${existing.status})` },
+      { status: 409 }
+    );
+  }
+
   const { data, error } = await db
     .from("target_keywords")
     .insert({ site_id: siteId, keyword: keyword.trim(), status: "pending" })
@@ -46,6 +63,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .single();
 
   if (error) {
+    // Unique constraint violation — race condition fallback
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "That keyword is already in your list" }, { status: 409 });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
