@@ -31,7 +31,7 @@ export async function POST(
   // Fetch article
   const { data: article, error: articleError } = await db
     .from("articles")
-    .select("id, slug, status, published_at, site_id")
+    .select("id, slug, url, status, published_at, site_id")
     .eq("id", id)
     .single();
 
@@ -51,7 +51,8 @@ export async function POST(
   }
 
   const domain = site.domain.replace(/^https?:\/\//, "");
-  const articleUrl = `https://${domain}/articles/${article.slug}`;
+  // Use existing URL if already set (pipeline saves /blog/{slug}) — otherwise construct it
+  const articleUrl = (article as { url?: string | null }).url ?? `https://${domain}/blog/${article.slug}`;
   const now = new Date().toISOString();
 
   // Update article: assign to site, mark published, set live URL
@@ -80,14 +81,15 @@ export async function POST(
     vercelConfig?.revalidate_token ?? process.env.VERCEL_REVALIDATE_SECRET;
 
   if (revalidateUrl && revalidateToken) {
+    const blogPath = `/blog/${article.slug}`;
     try {
       const res = await fetch(revalidateUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-revalidate-token": revalidateToken,
+          Authorization: `Bearer ${revalidateToken}`,
         },
-        body: JSON.stringify({ slug: article.slug }),
+        body: JSON.stringify({ paths: [blogPath, "/blog", "/sitemap.xml"] }),
       });
 
       if (res.ok) {
