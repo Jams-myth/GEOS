@@ -194,12 +194,17 @@ export const topicDiscovery = inngest.createFunction(
           await db.from("target_keywords").update({ status: "in_progress" }).eq("id", kw.id);
         });
 
+        const kwSourceUrls = await step.run(`fetch-sources-for-keyword-${kw.id}`, async () => {
+          const newsItems = await fetchGoogleNewsItems([kw.keyword]);
+          return newsItems.slice(0, 5).map((item) => item.sourceUrl);
+        });
+
         await step.sendEvent(`keyword-article-${kw.id}`, {
           name: "topic.selected",
           data: {
             siteId,
             headline: kw.keyword,
-            sourceUrls: [],
+            sourceUrls: kwSourceUrls,
             keywordCluster: kw.keyword,
             targetKeywordId: kw.id,
           },
