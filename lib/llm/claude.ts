@@ -134,9 +134,6 @@ export async function generateWithClaude(
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      // Disable reasoning/thinking mode — drafting is a generation task, not reasoning
-      // @ts-expect-error OpenRouter extra params not in OpenAI types
-      reasoning: { effort: "none" },
     });
 
     logTokenUsage({
@@ -194,8 +191,6 @@ Produce the complete revised article. Output begins at the META BLOCK and ends a
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      // @ts-expect-error OpenRouter extra params not in OpenAI types
-      reasoning: { effort: "none" },
     });
 
     logTokenUsage({
