@@ -19,7 +19,7 @@ async function computeSessionValue(password: string): Promise<string> {
     .join("");
 }
 
-export async function middleware(request: NextRequest): Promise<NextResponse> {
+export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
   if (!PROTECTED_PREFIXES.some((p) => pathname.startsWith(p))) {
