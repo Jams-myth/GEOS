@@ -4,6 +4,7 @@ import { getDb } from "../../lib/db/client";
 import { generateWithClaude, reviseWithClaude } from "../../lib/llm/claude";
 import type { GenerateInput, ScrapeResult, RevisionInput } from "../../lib/llm/claude";
 import { reviewWithGemini } from "../../lib/llm/gemini";
+import { generateGeminiBrief } from "../../lib/llm/gemini-brief";
 import { parseMetaBlock } from "../../lib/parsing/meta-block";
 import { scrapeSources } from "../../lib/scrape/index";
 import { uploadToSupabaseStorage, fetchAsBuffer } from "../../lib/storage/supabase-storage";
@@ -174,14 +175,29 @@ export const generateArticle = inngest.createFunction(
       return extractInfoGainAsset(scrapes);
     });
 
-    // ─── Step 4: Generate draft ───────────────────────────────────────────────
     const defaultAuthor = (site.default_author_jsonb as DefaultAuthor | null) ?? {};
     const structureTemplate = (site.structure_template_jsonb as StructureTemplate | null) ?? {};
+    const primaryKeyword = keywordCluster?.primary_keyword || event.data.keywordCluster || event.data.headline;
+    const targetAudience = structureTemplate.target_audience ?? "General UK adult audience";
 
+    // ─── Step 4: Gemini strategic brief (pre-write) ───────────────────────────
+    // Gemini uses its Google knowledge to tell Claude exactly what to write
+    // before a single word of the article is produced — eliminates revision loops
+    const geminiBrief = await step.run(`gemini-brief-${articleId}`, async () => {
+      return generateGeminiBrief({
+        keyword: primaryKeyword,
+        headline: event.data.headline,
+        targetAudience,
+        scrapes,
+        articleId,
+      });
+    });
+
+    // ─── Step 5: Generate draft (single pass, brief-informed) ─────────────────
     const generateInput: GenerateInput = {
-      primaryKeyword: keywordCluster?.primary_keyword || event.data.keywordCluster || event.data.headline,
+      primaryKeyword,
       secondaryKeywords: keywordCluster?.related_keywords ?? [],
-      targetAudience: structureTemplate.target_audience ?? "General UK adult audience",
+      targetAudience,
       informationGainAsset: infoGainAsset,
       wordCountTarget: structureTemplate.word_count_default ?? [1200, 1800],
       authorName: defaultAuthor.name ?? "Editorial Team",
@@ -190,120 +206,75 @@ export const generateArticle = inngest.createFunction(
       scrapes,
       internalLinks: [],
       headline: event.data.headline,
+      geminiBrief,
     };
 
     const rawMarkdown = await step.run(`generate-draft-${articleId}`, async () => {
       return generateWithClaude(generateInput, articleId);
     });
 
-    // ─── Step 5: Parse meta block ─────────────────────────────────────────────
+    // ─── Step 6: Parse meta block ─────────────────────────────────────────────
     const parsedDraft = await step.run(`parse-meta-block-${articleId}`, async () => {
       return parseMetaBlock(rawMarkdown);
     });
 
-    // ─── Step 6: Editor review 1 ─────────────────────────────────────────────
-    const editorResult1 = await step.run(`editor-review-1-${articleId}`, async () => {
+    // ─── Step 7: Single Gemini quality check ──────────────────────────────────
+    const editorResult = await step.run(`editor-review-${articleId}`, async () => {
       return reviewWithGemini(parsedDraft, articleId);
     });
 
-    // Placeholder check after first review
-    if (editorResult1.placeholderDetected) {
-      await step.run(`flag-placeholder-manual-review-${articleId}`, async () => {
-        await notifyDiscord({
-          kind: "placeholder_detected",
-          articleId,
-          headline: event.data.headline,
-        });
+    // Hard fail: placeholder detected — needs a real IGA, not a code fix
+    if (editorResult.placeholderDetected) {
+      await step.run(`flag-placeholder-${articleId}`, async () => {
+        await notifyDiscord({ kind: "placeholder_detected", articleId, headline: event.data.headline });
       });
       return { status: "manual_review_required", reason: "placeholder_detected" };
     }
 
-    // Track current state through revision loop
     let currentMarkdown = rawMarkdown;
     let currentParsed = parsedDraft;
-    let currentEditorResult = editorResult1;
+    let currentEditorResult = editorResult;
 
-    // ─── Steps 7–9: Revision loop ─────────────────────────────────────────────
+    // ─── Step 8: One targeted fix if quality check failed ────────────────────
+    // Unlike the old loop, we send only the draft + revision notes — no sources
     if (!currentEditorResult.pass) {
-      // Revision 1
-      const revisionInput1: RevisionInput = {
+      const revisionInput: RevisionInput = {
         rawMarkdown: currentMarkdown,
         revisionNotes: currentEditorResult.revision_notes,
         originalInput: generateInput,
       };
 
-      currentMarkdown = await step.run(`revise-1-${articleId}`, async () => {
-        return reviseWithClaude(revisionInput1, articleId);
+      currentMarkdown = await step.run(`revise-${articleId}`, async () => {
+        return reviseWithClaude(revisionInput, articleId);
       });
 
-      currentParsed = await step.run(`parse-meta-block-rev1-${articleId}`, async () => {
+      currentParsed = await step.run(`parse-meta-block-revised-${articleId}`, async () => {
         return parseMetaBlock(currentMarkdown);
       });
 
-      currentEditorResult = await step.run(`editor-review-2-${articleId}`, async () => {
+      currentEditorResult = await step.run(`editor-review-final-${articleId}`, async () => {
         return reviewWithGemini(currentParsed, articleId);
       });
 
-      // Placeholder check after revision 1
       if (currentEditorResult.placeholderDetected) {
-        await step.run(`flag-placeholder-rev1-${articleId}`, async () => {
-          await notifyDiscord({
-            kind: "placeholder_detected",
-            articleId,
-            headline: event.data.headline,
-          });
+        await step.run(`flag-placeholder-revised-${articleId}`, async () => {
+          await notifyDiscord({ kind: "placeholder_detected", articleId, headline: event.data.headline });
         });
         return { status: "manual_review_required", reason: "placeholder_detected" };
       }
 
+      // Still failing after one targeted fix — save as draft for manual review
+      // (don't discard the article; it's in the DB for the editor to fix)
       if (!currentEditorResult.pass) {
-        // Revision 2
-        const revisionInput2: RevisionInput = {
-          rawMarkdown: currentMarkdown,
-          revisionNotes: currentEditorResult.revision_notes,
-          originalInput: generateInput,
-        };
-
-        currentMarkdown = await step.run(`revise-2-${articleId}`, async () => {
-          return reviseWithClaude(revisionInput2, articleId);
-        });
-
-        currentParsed = await step.run(`parse-meta-block-rev2-${articleId}`, async () => {
-          return parseMetaBlock(currentMarkdown);
-        });
-
-        currentEditorResult = await step.run(`editor-review-3-${articleId}`, async () => {
-          return reviewWithGemini(currentParsed, articleId);
-        });
-
-        // Placeholder check after revision 2
-        if (currentEditorResult.placeholderDetected) {
-          await step.run(`flag-placeholder-rev2-${articleId}`, async () => {
-            await notifyDiscord({
-              kind: "placeholder_detected",
-              articleId,
-              headline: event.data.headline,
-            });
-          });
-          return { status: "manual_review_required", reason: "placeholder_detected" };
-        }
-
-        // Allow publish if only meta_block_ok failed but content scores are strong
         const scores = Object.values(currentEditorResult.scores);
         const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-        const onlyMetaFailing =
-          !currentEditorResult.hard_checks.meta_block_ok &&
-          !currentEditorResult.placeholderDetected &&
+        const isAcceptable = avgScore >= 6.5 &&
           currentEditorResult.hard_checks.footnotes >= 3 &&
-          currentEditorResult.hard_checks.faq_questions >= 4 &&
-          currentEditorResult.hard_checks.tldr_bullets >= 4 &&
-          avgScore >= 7;
+          currentEditorResult.hard_checks.faq_questions >= 4;
 
-        if (!currentEditorResult.pass && !onlyMetaFailing) {
-          // Still failing after 2 revisions — send to manual review
+        if (!isAcceptable) {
           await step.run(`notify-manual-review-${articleId}`, async () => {
-            const notificationConfig =
-              (site.notification_config_jsonb as NotificationConfig | null) ?? {};
+            const notificationConfig = (site.notification_config_jsonb as NotificationConfig | null) ?? {};
             await notifyDiscord({
               kind: "manual_review",
               articleId,
@@ -318,11 +289,11 @@ export const generateArticle = inngest.createFunction(
                 headline: event.data.headline,
                 articleId,
                 revisionNotes: currentEditorResult.revision_notes,
-                reason: "Failed editor review after 2 revisions",
+                reason: "Below quality threshold after targeted fix",
               });
             }
           });
-          return { status: "manual_review_required", reason: "failed_after_2_revisions" };
+          return { status: "manual_review_required", reason: "below_quality_threshold" };
         }
       }
     }

@@ -3,6 +3,7 @@ import { MODELS } from "./models";
 import { loadPrompt } from "./prompt-loader";
 import { withRetry } from "../util/retry";
 import { logTokenUsage } from "../cost/tracker";
+import type { GeminiBrief } from "./gemini-brief";
 
 export interface ScrapeResult {
   url: string;
@@ -23,7 +24,12 @@ export interface GenerateInput {
   scrapes: ScrapeResult[];
   internalLinks: string[];
   headline: string;
+  geminiBrief?: GeminiBrief;
 }
+
+// Cap each source at 6,000 chars (~1,500 tokens) — enough for Claude to extract
+// facts and citations without dumping the full article into every prompt
+const SOURCE_CHAR_LIMIT = 6_000;
 
 function buildUserPrompt(input: GenerateInput): string {
   const {
@@ -38,6 +44,7 @@ function buildUserPrompt(input: GenerateInput): string {
     scrapes,
     internalLinks,
     headline,
+    geminiBrief,
   } = input;
 
   const igaSection = informationGainAsset
@@ -45,16 +52,41 @@ function buildUserPrompt(input: GenerateInput): string {
     : `Information Gain Asset: None available. Emit [PLACEHOLDER: INSERT UNIQUE DATA] in Section 3.9 as directed by the framework — do not fabricate.`;
 
   const scrapeContent = scrapes
-    .map(
-      (s, i) =>
-        `### Source ${i + 1}: ${s.source_domain} (authority: ${s.authority_score}/10)\nURL: ${s.url}\n\n${s.content_md}`
-    )
+    .map((s, i) => {
+      const truncated =
+        s.content_md.length > SOURCE_CHAR_LIMIT
+          ? s.content_md.slice(0, SOURCE_CHAR_LIMIT) + "\n\n[...truncated]"
+          : s.content_md;
+      return `### Source ${i + 1}: ${s.source_domain} (authority: ${s.authority_score}/10)\nURL: ${s.url}\n\n${truncated}`;
+    })
     .join("\n\n---\n\n");
 
   const internalLinksSection =
     internalLinks.length > 0
       ? `Internal link opportunities (use [INTERNAL LINK: topic] format where relevant):\n${internalLinks.join("\n")}`
       : "Internal links: None provided.";
+
+  const briefSection = geminiBrief
+    ? `## Strategic Brief (from Gemini research pass — follow this exactly)
+
+Angle: ${geminiBrief.angle}
+
+Must Cover (non-negotiable sections):
+${geminiBrief.must_cover.map((t) => `- ${t}`).join("\n")}
+
+Content Gap to Fill: ${geminiBrief.content_gap}
+
+AI Citation Targets (cite these specifically):
+${geminiBrief.ai_citation_targets.map((t) => `- ${t}`).join("\n")}
+
+Recommended H2 Structure:
+${geminiBrief.recommended_h2s.map((h, i) => `${i + 1}. ${h}`).join("\n")}
+
+Key Entities to Name: ${geminiBrief.key_entities.join(", ")}
+
+Ranking Signals: ${geminiBrief.ranking_signals}
+`
+    : "";
 
   return `Generate a complete article for the following brief. Follow all directives in your system prompt exactly.
 
@@ -72,6 +104,7 @@ Tone / Brand Voice: ${brandVoice}
 
 ${internalLinksSection}
 
+${briefSection}
 ## Scraped Sources
 
 ${scrapeContent}`;
@@ -119,21 +152,21 @@ export async function generateWithClaude(
 export interface RevisionInput {
   rawMarkdown: string;
   revisionNotes: string[];
-  originalInput: Omit<GenerateInput, "scrapes" | "internalLinks"> & {
-    scrapes: ScrapeResult[];
-    internalLinks: string[];
-  };
+  originalInput: GenerateInput;
 }
 
+// Targeted fix — only sent when the single Gemini quality check flags specific issues.
+// No full rewrite: Claude applies the revision notes to the existing draft.
+// Sources are NOT re-sent to keep token cost low.
 export async function reviseWithClaude(
   input: RevisionInput,
   articleId?: string
 ): Promise<string> {
   const systemPrompt = await loadPrompt("writer-system.md");
 
-  const userPrompt = `You are revising an article draft based on editorial feedback. Apply all revision notes below to the draft while maintaining full compliance with your system prompt directives.
+  const userPrompt = `You are revising an article draft based on editorial feedback. Apply all revision notes precisely to the draft while maintaining full compliance with your system prompt directives.
 
-## Revision Notes
+## Revision Notes (apply all of these)
 
 ${input.revisionNotes.map((note, i) => `${i + 1}. ${note}`).join("\n")}
 
@@ -141,7 +174,7 @@ ${input.revisionNotes.map((note, i) => `${i + 1}. ${note}`).join("\n")}
 
 ${input.rawMarkdown}
 
-## Original Brief (for context)
+## Original Brief (context only)
 
 Primary Keyword: ${input.originalInput.primaryKeyword}
 Author: ${input.originalInput.authorName}, ${input.originalInput.authorCredential}
