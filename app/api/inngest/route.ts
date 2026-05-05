@@ -11,6 +11,7 @@ const functions = [topicDiscovery, generateArticle, weeklyAssessment, applyImpro
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions,
+  streaming: "allow",
 });
 
 export const maxDuration = 60;
