@@ -1,9 +1,31 @@
+import OpenAI from "openai";
 import { inngest } from "../client";
 import { getDb } from "../../lib/db/client";
 import { notifyDiscord } from "../../lib/notify/discord";
 import { fetchXPosts } from "../../lib/sources/x";
 import { fetchGdeltArticles } from "../../lib/sources/gdelt";
+import { MODELS } from "../../lib/llm/models";
 import type { Json } from "../../lib/db/types";
+
+async function generateHeadlineFromKeyword(keyword: string): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return keyword;
+
+  const client = new OpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey });
+
+  const response = await client.chat.completions.create({
+    model: MODELS.WRITER,
+    max_tokens: 60,
+    messages: [
+      {
+        role: "user",
+        content: `Convert this SEO keyword into a compelling, properly capitalised article headline for a UK health/medication comparison website. Return ONLY the headline, nothing else.\n\nKeyword: ${keyword.trim()}`,
+      },
+    ],
+  });
+
+  return response.choices[0]?.message?.content?.trim() || keyword;
+}
 
 interface RedditPost {
   headline: string;
@@ -199,11 +221,15 @@ export const topicDiscovery = inngest.createFunction(
           return newsItems.slice(0, 5).map((item) => item.sourceUrl);
         });
 
+        const kwHeadline = await step.run(`generate-headline-for-keyword-${kw.id}`, async () => {
+          return generateHeadlineFromKeyword(kw.keyword);
+        });
+
         await step.sendEvent(`keyword-article-${kw.id}`, {
           name: "topic.selected",
           data: {
             siteId,
-            headline: kw.keyword,
+            headline: kwHeadline,
             sourceUrls: kwSourceUrls,
             keywordCluster: kw.keyword,
             targetKeywordId: kw.id,
