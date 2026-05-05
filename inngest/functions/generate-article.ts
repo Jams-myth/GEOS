@@ -465,11 +465,15 @@ export const generateArticle = inngest.createFunction(
     // ─── Step 13: Revalidate Vercel ───────────────────────────────────────────
     // REVALIDATION — only fires on successful publish path
     await step.run(`revalidate-vercel-${articleId}`, async () => {
-      await revalidateLiveSite(event.data.siteId, [
-        `/blog/${published.slug}`,
-        "/blog",
-        "/sitemap.xml",
-      ]);
+      try {
+        await revalidateLiveSite(event.data.siteId, [
+          `/blog/${published.slug}`,
+          "/blog",
+          "/sitemap.xml",
+        ]);
+      } catch (err) {
+        console.warn(`[generate-article] Revalidation failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+      }
     });
 
     // ─── Steps 13–14: Indexing ────────────────────────────────────────────────
