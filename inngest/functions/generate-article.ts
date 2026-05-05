@@ -449,8 +449,8 @@ export const generateArticle = inngest.createFunction(
     await step.run(`revalidate-vercel-${articleId}`, async () => {
       try {
         await revalidateLiveSite(event.data.siteId, [
-          `/blog/${published.slug}`,
-          "/blog",
+          `/articles/${published.slug}`,
+          "/articles",
           "/sitemap.xml",
         ]);
       } catch (err) {

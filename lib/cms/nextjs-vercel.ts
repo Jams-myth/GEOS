@@ -38,7 +38,7 @@ export async function publishArticleRow(input: PublishInput): Promise<PublishRes
 
   if (siteError || !site) throw new Error(`Site not found: ${input.siteId}`);
 
-  const url = `https://${site.domain}/blog/${input.slug}`;
+  const url = `https://${site.domain}/articles/${input.slug}`;
   const now = new Date().toISOString();
 
   const upsertRow: ArticleInsert = {
@@ -128,13 +128,17 @@ export async function revalidateLiveSite(
   const secret = process.env.VERCEL_REVALIDATE_SECRET;
   if (!secret) throw new Error("VERCEL_REVALIDATE_SECRET is not set");
 
+  // Extract article slug from paths (e.g. /articles/my-slug → my-slug)
+  const slugPath = paths.find((p) => p.match(/^\/(articles|blog)\/.+/));
+  const slug = slugPath ? slugPath.replace(/^\/(articles|blog)\//, "") : undefined;
+
   const response = await fetch(revalidateUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${secret}`,
+      "x-revalidate-token": secret,
     },
-    body: JSON.stringify({ paths }),
+    body: JSON.stringify({ slug }),
   });
 
   if (!response.ok) {

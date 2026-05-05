@@ -51,8 +51,8 @@ export async function POST(
   }
 
   const domain = site.domain.replace(/^https?:\/\//, "");
-  // Use existing URL if already set (pipeline saves /blog/{slug}) — otherwise construct it
-  const articleUrl = (article as { url?: string | null }).url ?? `https://${domain}/blog/${article.slug}`;
+  // Always use /articles/ — the canonical path on comparemeds.uk
+  const articleUrl = `https://${domain}/articles/${article.slug}`;
   const now = new Date().toISOString();
 
   // Update article: assign to site, mark published, set live URL
@@ -81,15 +81,14 @@ export async function POST(
     vercelConfig?.revalidate_token ?? process.env.VERCEL_REVALIDATE_SECRET;
 
   if (revalidateUrl && revalidateToken) {
-    const blogPath = `/blog/${article.slug}`;
     try {
       const res = await fetch(revalidateUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${revalidateToken}`,
+          "x-revalidate-token": revalidateToken,
         },
-        body: JSON.stringify({ paths: [blogPath, "/blog", "/sitemap.xml"] }),
+        body: JSON.stringify({ slug: article.slug }),
       });
 
       if (res.ok) {
