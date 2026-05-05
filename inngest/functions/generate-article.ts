@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash } from "crypto";
 import { inngest } from "../client";
 import { getDb } from "../../lib/db/client";
 import { generateWithClaude, reviseWithClaude } from "../../lib/llm/claude";

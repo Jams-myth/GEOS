@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash } from "crypto";
 import { scrapeWithFirecrawl } from "./firecrawl";
 import { scrapeWithJina } from "./jina";
 import { getDb } from "../db/client";

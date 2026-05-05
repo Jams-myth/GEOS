@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "node:crypto";
+import crypto from "crypto";
 
 /** Compute the cookie value from the configured password. */
 function computeSessionValue(password: string): string {

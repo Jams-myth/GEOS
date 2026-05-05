@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import crypto from "crypto";
 import { getDb } from "../db/client";
 import { Resend } from "resend";
 import type { Improvement } from "../db/types";
