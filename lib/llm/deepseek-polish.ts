@@ -37,6 +37,9 @@ ${params.articleMarkdown}`;
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+      // Polish is a targeted editing task, not a reasoning task
+      // @ts-expect-error OpenRouter extra params not in OpenAI types
+      reasoning: { effort: "none" },
     });
 
     logTokenUsage({
