@@ -11,6 +11,17 @@ interface CitationData {
   gemini?: { cited?: boolean };
 }
 
+interface GenerationScores {
+  total?: number;
+  accuracy_fact_checking?: number;
+  information_density?: number;
+  entity_optimisation?: number;
+  authoritative_eeat?: number;
+  directness_intent?: number;
+  consensus_safety?: number;
+  source_freshness?: number;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   draft:     { label: "Ready to Review", className: "bg-amber-100 text-amber-700" },
   published: { label: "Live",            className: "bg-green-100 text-green-700" },
@@ -27,12 +38,41 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function ScoreBadge({ scores }: { scores: GenerationScores | null }) {
+  const total = scores?.total;
+  if (total == null) return <span className="text-gray-400">—</span>;
+
+  const colour =
+    total >= 85 ? "text-green-700 bg-green-50" :
+    total >= 70 ? "text-amber-700 bg-amber-50" :
+                  "text-red-700 bg-red-50";
+
+  const title = scores ? [
+    `Accuracy: ${scores.accuracy_fact_checking ?? "—"}/20`,
+    `Density: ${scores.information_density ?? "—"}/15`,
+    `Entities: ${scores.entity_optimisation ?? "—"}/15`,
+    `E-E-A-T: ${scores.authoritative_eeat ?? "—"}/15`,
+    `Directness: ${scores.directness_intent ?? "—"}/15`,
+    `Safety: ${scores.consensus_safety ?? "—"}/10`,
+    `Freshness: ${scores.source_freshness ?? "—"}/10`,
+  ].join(" · ") : "";
+
+  return (
+    <span
+      className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full tabular-nums ${colour}`}
+      title={title}
+    >
+      {total}/100
+    </span>
+  );
+}
+
 async function getArticles() {
   const db = getDb();
 
   const { data: articles } = await db
     .from("articles")
-    .select("id, title, primary_keyword, status, published_at, created_at, url")
+    .select("id, title, primary_keyword, status, published_at, created_at, url, generation_scores_jsonb")
     .order("created_at", { ascending: false });
 
   if (!articles || articles.length === 0) return [];
@@ -64,6 +104,7 @@ async function getArticles() {
       ...article,
       position: assessment?.serp?.position ?? null,
       citedCount,
+      scores: (article.generation_scores_jsonb as GenerationScores | null),
     };
   });
 }
@@ -96,6 +137,7 @@ export default async function ArticlesPage() {
             <tr className="border-b border-gray-100 bg-gray-50 text-gray-600">
               <th className="text-left font-medium px-5 py-3">Title</th>
               <th className="text-left font-medium px-5 py-3 w-44">Primary Keyword</th>
+              <th className="text-right font-medium px-5 py-3 w-24">Score</th>
               <th className="text-right font-medium px-5 py-3 w-28">Position</th>
               <th className="text-right font-medium px-5 py-3 w-28">AI Citations</th>
               <th className="text-left font-medium px-5 py-3 w-36">Status</th>
@@ -106,7 +148,7 @@ export default async function ArticlesPage() {
           <tbody className="divide-y divide-gray-50">
             {articles.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-gray-400">
+                <td colSpan={8} className="px-5 py-10 text-center text-gray-400">
                   No articles yet.
                 </td>
               </tr>
@@ -129,6 +171,9 @@ export default async function ArticlesPage() {
                   )}
                 </td>
                 <td className="px-5 py-3 text-gray-600">{article.primary_keyword ?? "—"}</td>
+                <td className="px-5 py-3 text-right">
+                  <ScoreBadge scores={article.scores} />
+                </td>
                 <td className="px-5 py-3 text-right text-gray-700 tabular-nums">
                   {article.position != null ? article.position.toFixed(1) : "—"}
                 </td>

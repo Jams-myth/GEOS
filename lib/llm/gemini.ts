@@ -6,36 +6,38 @@ import { withRetry } from "../util/retry";
 import { logTokenUsage } from "../cost/tracker";
 import type { ParsedDraft } from "../parsing/meta-block";
 
+// 100-point YMYL/GEO Master Scorecard
 const EditorScoresSchema = z.object({
-  keyword_density: z.number().min(0).max(10),
-  semantic_coverage: z.number().min(0).max(10),
-  eeat: z.number().min(0).max(10),
-  geo_citation: z.number().min(0).max(10),
-  readability: z.number().min(0).max(10),
-  internal_linking: z.number().min(0).max(10),
-  schema_completeness: z.number().min(0).max(10),
-  originality: z.number().min(0).max(10),
+  accuracy_fact_checking: z.number().min(0).max(20),
+  information_density:    z.number().min(0).max(15),
+  entity_optimisation:    z.number().min(0).max(15),
+  authoritative_eeat:     z.number().min(0).max(15),
+  directness_intent:      z.number().min(0).max(15),
+  consensus_safety:       z.number().min(0).max(10),
+  source_freshness:       z.number().min(0).max(10),
+  total:                  z.number().min(0).max(100),
 });
 
 const HardChecksSchema = z.object({
-  tables: z.number().int().min(0),
-  footnotes: z.number().int().min(0),
-  quotes: z.number().int().min(0),
-  faq_questions: z.number().int().min(0),
-  tldr_bullets: z.number().int().min(0),
+  tables:               z.number().int().min(0),
+  footnotes:            z.number().int().min(0),
+  quotes:               z.number().int().min(0),
+  faq_questions:        z.number().int().min(0),
+  tldr_bullets:         z.number().int().min(0),
   placeholder_detected: z.boolean(),
-  meta_block_ok: z.boolean(),
+  meta_block_ok:        z.boolean(),
 });
 
 const EditorResultSchema = z.object({
-  pass: z.boolean(),
-  scores: EditorScoresSchema,
-  hard_checks: HardChecksSchema,
-  revision_notes: z.array(z.string()),
+  pass:              z.boolean(),
+  scores:            EditorScoresSchema,
+  hard_checks:       HardChecksSchema,
+  revision_notes:    z.array(z.string()),
   placeholderDetected: z.boolean(),
 });
 
 export type EditorResult = z.infer<typeof EditorResultSchema>;
+export type EditorScores = z.infer<typeof EditorScoresSchema>;
 
 function getClient(): OpenAI {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -52,7 +54,8 @@ export async function reviewWithGemini(
 ): Promise<EditorResult> {
   const systemPrompt = await loadPrompt("editor-rubric.md");
 
-  const prompt = `Review the following article draft. The META BLOCK has already been parsed upstream — meta_block_ok is ${draft.ok ? "true" : "false"}.
+  const prompt = `Review the following article draft against the YMYL/GEO Master Scorecard.
+META BLOCK parsed upstream — meta_block_ok is ${draft.ok ? "true" : "false"}.
 
 META TITLE: ${draft.meta_title}
 META DESCRIPTION: ${draft.meta_description}

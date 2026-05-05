@@ -5,6 +5,7 @@ import { generateWithClaude, reviseWithClaude } from "../../lib/llm/claude";
 import type { GenerateInput, ScrapeResult, RevisionInput } from "../../lib/llm/claude";
 import { reviewWithGemini } from "../../lib/llm/gemini";
 import { generateGeminiBrief } from "../../lib/llm/gemini-brief";
+import { polishWithDeepSeek } from "../../lib/llm/deepseek-polish";
 import { parseMetaBlock } from "../../lib/parsing/meta-block";
 import { scrapeSources } from "../../lib/scrape/index";
 import { uploadToSupabaseStorage, fetchAsBuffer } from "../../lib/storage/supabase-storage";
@@ -263,12 +264,9 @@ export const generateArticle = inngest.createFunction(
         return { status: "manual_review_required", reason: "placeholder_detected" };
       }
 
-      // Still failing after one targeted fix — save as draft for manual review
-      // (don't discard the article; it's in the DB for the editor to fix)
+      // Still failing after one targeted fix — check if it's acceptable to proceed
       if (!currentEditorResult.pass) {
-        const scores = Object.values(currentEditorResult.scores);
-        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-        const isAcceptable = avgScore >= 6.5 &&
+        const isAcceptable = currentEditorResult.scores.total >= 60 &&
           currentEditorResult.hard_checks.footnotes >= 3 &&
           currentEditorResult.hard_checks.faq_questions >= 4;
 
@@ -289,7 +287,7 @@ export const generateArticle = inngest.createFunction(
                 headline: event.data.headline,
                 articleId,
                 revisionNotes: currentEditorResult.revision_notes,
-                reason: "Below quality threshold after targeted fix",
+                reason: `Below quality threshold (score: ${currentEditorResult.scores.total}/100) after targeted fix`,
               });
             }
           });
@@ -297,6 +295,19 @@ export const generateArticle = inngest.createFunction(
         }
       }
     }
+
+    // ─── Step 9: DeepSeek V4 Pro final polish ────────────────────────────────
+    currentMarkdown = await step.run(`deepseek-polish-${articleId}`, async () => {
+      return polishWithDeepSeek({
+        articleMarkdown: currentMarkdown,
+        geminiBrief,
+        articleId,
+      });
+    });
+
+    currentParsed = await step.run(`parse-meta-block-polished-${articleId}`, async () => {
+      return parseMetaBlock(currentMarkdown);
+    });
 
     // ─── Step 9b: Semantic duplicate check via pgvector ──────────────────────
     const isDuplicate = await step.run(`check-duplicate-${articleId}`, async () => {
