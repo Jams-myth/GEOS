@@ -62,8 +62,8 @@ export async function publishArticleRow(input: PublishInput): Promise<PublishRes
     footnote_count: input.footnoteCount ?? 0,
     table_count: input.tableCount ?? 0,
     quote_count: input.quoteCount ?? 0,
-    status: "published",
-    published_at: now,
+    status: "draft",
+    published_at: null,
     updated_at: now,
   };
 

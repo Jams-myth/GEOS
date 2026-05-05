@@ -11,13 +11,29 @@ interface CitationData {
   gemini?: { cited?: boolean };
 }
 
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  draft:     { label: "Ready to Review", className: "bg-amber-100 text-amber-700" },
+  published: { label: "Live",            className: "bg-green-100 text-green-700" },
+  skipped:   { label: "Skipped",         className: "bg-gray-100 text-gray-500" },
+  manual_review_required: { label: "Needs Review", className: "bg-red-100 text-red-600" },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status, className: "bg-gray-100 text-gray-600" };
+  return (
+    <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
 async function getArticles() {
   const db = getDb();
 
   const { data: articles } = await db
     .from("articles")
-    .select("id, title, primary_keyword, status, published_at, url")
-    .order("published_at", { ascending: false });
+    .select("id, title, primary_keyword, status, published_at, created_at, url")
+    .order("created_at", { ascending: false });
 
   if (!articles || articles.length === 0) return [];
 
@@ -27,7 +43,6 @@ async function getArticles() {
     .in("article_id", articles.map((a) => a.id))
     .order("week_of", { ascending: false });
 
-  // Keep only the most recent assessment per article
   const latestMap = new Map<string, { serp: SerpData; citations: CitationData }>();
   for (const a of latestAssessments ?? []) {
     if (!a.article_id || latestMap.has(a.article_id)) continue;
@@ -53,14 +68,26 @@ async function getArticles() {
   });
 }
 
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 export default async function ArticlesPage() {
   const articles = await getArticles();
+
+  const liveCount = articles.filter((a) => a.status === "published").length;
+  const draftCount = articles.filter((a) => a.status === "draft").length;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Articles</h1>
-        <span className="text-sm text-gray-500">{articles.length} articles</span>
+        <div className="flex gap-4 text-sm text-gray-500">
+          <span>{articles.length} total</span>
+          <span className="text-green-600 font-medium">{liveCount} live</span>
+          <span className="text-amber-600 font-medium">{draftCount} ready to review</span>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -71,14 +98,15 @@ export default async function ArticlesPage() {
               <th className="text-left font-medium px-5 py-3 w-44">Primary Keyword</th>
               <th className="text-right font-medium px-5 py-3 w-28">Position</th>
               <th className="text-right font-medium px-5 py-3 w-28">AI Citations</th>
-              <th className="text-left font-medium px-5 py-3 w-28">Status</th>
-              <th className="text-left font-medium px-5 py-3 w-32">Published</th>
+              <th className="text-left font-medium px-5 py-3 w-36">Status</th>
+              <th className="text-left font-medium px-5 py-3 w-28">Generated</th>
+              <th className="text-left font-medium px-5 py-3 w-28">Date Live</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {articles.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-gray-400">
+                <td colSpan={7} className="px-5 py-10 text-center text-gray-400">
                   No articles yet.
                 </td>
               </tr>
@@ -89,7 +117,7 @@ export default async function ArticlesPage() {
                   <Link href={`/articles/${article.id}`} className="font-medium text-indigo-600 hover:underline leading-tight block">
                     {article.title}
                   </Link>
-                  {article.url && (
+                  {article.url && article.status === "published" && (
                     <a
                       href={article.url}
                       target="_blank"
@@ -106,9 +134,7 @@ export default async function ArticlesPage() {
                 </td>
                 <td className="px-5 py-3 text-right">
                   {article.citedCount != null ? (
-                    <span
-                      className={`font-medium ${article.citedCount > 0 ? "text-green-600" : "text-gray-400"}`}
-                    >
+                    <span className={`font-medium ${article.citedCount > 0 ? "text-green-600" : "text-gray-400"}`}>
                       {article.citedCount}/3
                     </span>
                   ) : (
@@ -116,27 +142,10 @@ export default async function ArticlesPage() {
                   )}
                 </td>
                 <td className="px-5 py-3">
-                  <span
-                    className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                      article.status === "published"
-                        ? "bg-green-100 text-green-700"
-                        : article.status === "draft"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {article.status}
-                  </span>
+                  <StatusBadge status={article.status ?? "draft"} />
                 </td>
-                <td className="px-5 py-3 text-gray-500 text-xs">
-                  {article.published_at
-                    ? new Date(article.published_at).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })
-                    : "—"}
-                </td>
+                <td className="px-5 py-3 text-gray-500 text-xs">{fmtDate(article.created_at)}</td>
+                <td className="px-5 py-3 text-gray-500 text-xs">{fmtDate(article.published_at)}</td>
               </tr>
             ))}
           </tbody>
