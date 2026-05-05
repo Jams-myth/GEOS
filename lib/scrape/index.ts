@@ -60,12 +60,17 @@ export async function scrapeSources(urls: string[]): Promise<ScrapeResult[]> {
       continue;
     }
 
-    // Scrape fresh
-    let scrapeResult: { content_md: string; source_domain: string };
+    // Scrape fresh — skip URL silently if both scrapers fail
+    let scrapeResult: { content_md: string; source_domain: string } | null = null;
     try {
       scrapeResult = await scrapeWithFirecrawl(url);
     } catch {
-      scrapeResult = await scrapeWithJina(url);
+      try {
+        scrapeResult = await scrapeWithJina(url);
+      } catch (err) {
+        console.warn(`[scrape] Skipping ${url} — both scrapers failed: ${err instanceof Error ? err.message : String(err)}`);
+        continue;
+      }
     }
 
     const domain = scrapeResult.source_domain;
