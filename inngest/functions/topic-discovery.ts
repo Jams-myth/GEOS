@@ -15,11 +15,12 @@ async function generateHeadlineFromKeyword(keyword: string): Promise<string> {
 
   const response = await client.chat.completions.create({
     model: MODELS.WRITER,
-    max_tokens: 60,
+    max_tokens: 120,
+    stop: ["\n", "\r"],
     messages: [
       {
         role: "user",
-        content: `Convert this SEO keyword into a compelling, properly capitalised article headline for a UK health/medication comparison website. Return ONLY the headline, nothing else.\n\nKeyword: ${keyword.trim()}`,
+        content: `Convert this SEO keyword into a compelling, properly capitalised article headline for a UK health/medication comparison website. Write it as a complete sentence or title — do not truncate. Return ONLY the headline on a single line, nothing else.\n\nKeyword: ${keyword.trim()}`,
       },
     ],
   });
