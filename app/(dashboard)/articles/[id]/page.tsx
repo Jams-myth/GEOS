@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import ArticleViewer from "./ArticleViewer";
 import PushToSite from "./PushToSite";
 import RePolish from "./RePolish";
+import IndexingStatus from "./IndexingStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -81,39 +82,11 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
       {/* Indexing status */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="text-xs text-gray-400 uppercase tracking-wide mb-3">Search Engine Indexing</div>
-        {(() => {
-          type IndexingJob = { adapter: string; jobId: string; status: string; submittedAt?: string };
-          const raw = article.indexing_jobs_jsonb;
-          const jobs: IndexingJob[] = Array.isArray(raw) ? (raw as IndexingJob[]) : [];
-          if (jobs.length === 0) {
-            return <p className="text-sm text-gray-400">Not yet submitted. Push to site to trigger SpeedyIndex submission.</p>;
-          }
-          return (
-            <div className="space-y-2">
-              {jobs.map((job, i) => (
-                <div key={i} className="flex items-center gap-3 text-sm">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-green-700">
-                    <span className="h-2 w-2 rounded-full bg-green-500" />
-                    Submitted to SpeedyIndex
-                  </span>
-                  <span className="text-gray-400 font-mono text-xs">job {job.jobId}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    job.status === "submitted" || job.status === "ok"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}>
-                    {job.status}
-                  </span>
-                  {job.submittedAt && (
-                    <span className="text-xs text-gray-400 ml-auto">
-                      {new Date(job.submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          );
-        })()}
+        <IndexingStatus
+          articleId={article.id}
+          initialJobs={Array.isArray(article.indexing_jobs_jsonb) ? (article.indexing_jobs_jsonb as { adapter: string; jobId: string; status: string; submittedAt?: string; checkedAt?: string }[]) : []}
+          hasUrl={!!article.url}
+        />
       </div>
 
       {/* Meta */}
