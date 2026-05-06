@@ -47,8 +47,8 @@ export const indexingCron = inngest.createFunction(
     name: "Daily SpeedyIndex Status Check & Retry",
     concurrency: { limit: 1 },
     retries: 1,
+    triggers: [{ cron: "0 8 * * *" }], // 08:00 UTC daily
   },
-  { cron: "0 8 * * *" }, // 08:00 UTC daily
   async ({ step }) => {
     // ── 1. Fetch all published articles with a URL ──────────────────────────
     const articles: ArticleRow[] = await step.run("fetch-published-articles", async () => {
