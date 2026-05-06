@@ -46,19 +46,36 @@ const COLOUR_BLUE = 0x5865f2;
 function buildEmbed(notification: DiscordNotification): DiscordEmbed {
   switch (notification.kind) {
     case "article_published": {
-      const scoreFields = Object.entries(notification.scores).map(([k, v]) => ({
-        name: k.replace(/_/g, " "),
-        value: `${v}/10`,
-        inline: true,
-      }));
+      // Score max values for the v2 100-pt rubric
+      const SCORE_MAX: Record<string, number> = {
+        accuracy_fact_checking: 20,
+        information_density: 15,
+        structural_machine_readability: 10,
+        authoritative_eeat: 15,
+        entity_optimisation: 10,
+        directness_intent: 10,
+        consensus_safety: 10,
+        source_freshness: 10,
+        total: 100,
+      };
+      const scoreFields = Object.entries(notification.scores)
+        .filter(([k]) => k !== "total")
+        .map(([k, v]) => ({
+          name: k.replace(/_/g, " "),
+          value: `${v}/${SCORE_MAX[k] ?? 10}`,
+          inline: true,
+        }));
+      const total = notification.scores["total"] ?? Object.values(notification.scores).reduce((a, b) => a + b, 0);
       return {
-        title: `Published: ${notification.title}`,
+        title: `✅ Draft Ready for Review: ${notification.title}`,
         color: COLOUR_GREEN,
         fields: [
-          { name: "URL", value: notification.url },
+          { name: "Score", value: `**${total}/100**`, inline: true },
+          { name: "Admin URL", value: `http://localhost:3000/articles/${notification.articleId}`, inline: true },
+          { name: "​", value: "​", inline: false },
           ...scoreFields,
           {
-            name: "Content counts",
+            name: "Content",
             value: `Footnotes: ${notification.footnoteCount} | Tables: ${notification.tableCount} | Quotes: ${notification.quoteCount}`,
           },
         ],

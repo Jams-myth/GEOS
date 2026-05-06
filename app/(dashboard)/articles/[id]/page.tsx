@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import ArticleViewer from "./ArticleViewer";
 import PushToSite from "./PushToSite";
 import RePolish from "./RePolish";
+import Regenerate from "./Regenerate";
 import IndexingStatus from "./IndexingStatus";
 
 export const dynamic = "force-dynamic";
@@ -77,6 +78,12 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="text-xs text-gray-400 uppercase tracking-wide mb-3">Re-Polish &amp; Re-Score</div>
         <RePolish articleId={article.id} />
+      </div>
+
+      {/* Regenerate from scratch */}
+      <div className="bg-white rounded-xl border border-red-100 p-5 mb-6">
+        <div className="text-xs text-red-400 uppercase tracking-wide mb-3">Regenerate from Scratch</div>
+        <Regenerate articleId={article.id} />
       </div>
 
       {/* Indexing status */}
