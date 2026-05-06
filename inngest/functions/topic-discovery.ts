@@ -28,25 +28,33 @@ async function generateHeadlineFromKeyword(keyword: string): Promise<string> {
   return response.choices[0]?.message?.content?.trim() || keyword;
 }
 
-interface RedditPost {
+interface SourceItem {
   headline: string;
   sourceUrl: string;
   engagement: number;
   publishedAt: string; // ISO string — Date objects are serialized by Inngest steps
+  sourceType: SourceType;
 }
 
-interface NewsItem {
-  headline: string;
-  sourceUrl: string;
-  engagement: number;
-  publishedAt: string; // ISO string — Date objects are serialized by Inngest steps
-}
+type SourceType = "reddit" | "news" | "x" | "gdelt";
 
 interface ScoredCandidate {
   headline: string;
   sourceUrl: string;
   score: number;
+  sourceType: SourceType;
 }
+
+// Per-source config:
+//   engagementMultiplier — dampens raw engagement so Reddit upvotes can't dominate
+//   qualityBonus         — inherent value of the source type for article generation
+//   requiresKeywordMatch — if true, candidate is dropped when it matches 0 keywords
+const SOURCE_CONFIG: Record<SourceType, { engagementMultiplier: number; qualityBonus: number; requiresKeywordMatch: boolean }> = {
+  reddit: { engagementMultiplier: 0.05, qualityBonus:  0, requiresKeywordMatch: true  },
+  news:   { engagementMultiplier: 0.00, qualityBonus: 25, requiresKeywordMatch: false },
+  gdelt:  { engagementMultiplier: 0.00, qualityBonus: 25, requiresKeywordMatch: false },
+  x:      { engagementMultiplier: 0.10, qualityBonus:  5, requiresKeywordMatch: true  },
+};
 
 interface StructureTemplate {
   topic_sources?: {
@@ -99,8 +107,13 @@ function wordOverlapRatio(a: string, b: string): number {
   return matches / Math.max(aWords.size, bWords.length);
 }
 
-async function fetchRedditPosts(subreddits: string[]): Promise<RedditPost[]> {
-  const posts: RedditPost[] = [];
+// Reddit self-post URL — the link IS the reddit.com thread itself, nothing to scrape
+function isRedditSelfPost(url: string): boolean {
+  return /reddit\.com\/r\/[^/]+\/comments\//i.test(url);
+}
+
+async function fetchRedditPosts(subreddits: string[]): Promise<SourceItem[]> {
+  const posts: SourceItem[] = [];
   for (const subreddit of subreddits) {
     try {
       const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=25`;
@@ -120,11 +133,14 @@ async function fetchRedditPosts(subreddits: string[]): Promise<RedditPost[]> {
       for (const child of children) {
         const d = child.data;
         if (!d?.title || !d?.url) continue;
+        // Skip self posts — the URL is the Reddit thread itself, not an article
+        if (isRedditSelfPost(d.url)) continue;
         posts.push({
           headline: d.title,
           sourceUrl: d.url,
           engagement: d.score ?? 0,
           publishedAt: new Date((d.created_utc ?? 0) * 1000).toISOString(),
+          sourceType: "reddit",
         });
       }
     } catch {
@@ -134,8 +150,8 @@ async function fetchRedditPosts(subreddits: string[]): Promise<RedditPost[]> {
   return posts;
 }
 
-async function fetchGoogleNewsItems(queries: string[]): Promise<NewsItem[]> {
-  const items: NewsItem[] = [];
+async function fetchGoogleNewsItems(queries: string[], sourceType: SourceType = "news"): Promise<SourceItem[]> {
+  const items: SourceItem[] = [];
   for (const query of queries) {
     try {
       const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-GB&gl=GB&ceid=GB:en`;
@@ -160,7 +176,7 @@ async function fetchGoogleNewsItems(queries: string[]): Promise<NewsItem[]> {
         if (!headline || !sourceUrl) continue;
 
         const publishedAt = (pubDateStr ? new Date(pubDateStr) : new Date()).toISOString();
-        items.push({ headline, sourceUrl, engagement: 0, publishedAt });
+        items.push({ headline, sourceUrl, engagement: 0, publishedAt, sourceType });
       }
     } catch {
       // Silently skip failed queries
@@ -262,26 +278,33 @@ export const topicDiscovery = inngest.createFunction(
       const insertedCandidates = await step.run(`score-and-dedupe-${siteId}`, async () => {
         const db = getDb();
 
-        // Merge all candidates — publishedAt is already an ISO string from step serialization
-        const rawCandidates: Array<{ headline: string; sourceUrl: string; engagement: number; publishedAt: string }> = [
+        // Merge all candidates — tag X and GDELT with their source type
+        const rawCandidates: SourceItem[] = [
           ...redditPosts,
           ...newsItems,
-          ...xPosts,
-          ...gdeltArticles,
+          ...xPosts.map((p) => ({ ...p, sourceType: "x" as SourceType })),
+          ...gdeltArticles.map((a) => ({ ...a, sourceType: "gdelt" as SourceType })),
         ];
 
-        // Filter out non-scrapeable URLs (images, videos, reddit media)
-        const UNSCRAPEBLE_PATTERNS = [/imgur\.com/, /redd\.it/, /\.jpg$/, /\.jpeg$/, /\.png$/, /\.gif$/, /\.mp4$/];
+        // Filter out non-scrapeable URLs (images, videos, reddit media, reddit self posts)
+        const UNSCRAPEBLE_PATTERNS = [/imgur\.com/, /redd\.it/, /reddit\.com\/r\/[^/]+\/comments\//, /\.jpg$/, /\.jpeg$/, /\.png$/, /\.gif$/, /\.mp4$/];
         const allCandidates = rawCandidates.filter(
           (c) => c.sourceUrl.startsWith("https://") && !UNSCRAPEBLE_PATTERNS.some((p) => p.test(c.sourceUrl))
         );
 
-        // Score each candidate
-        const scored: ScoredCandidate[] = allCandidates.map((c) => {
+        // Score each candidate using per-source config
+        // Formula: (engagement × engagementMultiplier × recencyWeight) + keywordMatchBonus + qualityBonus
+        // requiresKeywordMatch sources (reddit, x) are dropped if they match 0 keywords
+        const scored: ScoredCandidate[] = allCandidates.flatMap((c) => {
+          const cfg = SOURCE_CONFIG[c.sourceType];
           const rw = recencyWeight(new Date(c.publishedAt));
           const km = keywordMatchBonus(c.headline, keywordList);
-          const score = c.engagement * rw + km;
-          return { headline: c.headline, sourceUrl: c.sourceUrl, score };
+
+          // Drop Reddit/X posts that don't match any target keyword
+          if (cfg.requiresKeywordMatch && km === 0) return [];
+
+          const score = (c.engagement * cfg.engagementMultiplier * rw) + km + cfg.qualityBonus;
+          return [{ headline: c.headline, sourceUrl: c.sourceUrl, score, sourceType: c.sourceType }];
         });
 
         // Sort by score descending
