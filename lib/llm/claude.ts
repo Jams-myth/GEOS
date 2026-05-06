@@ -88,6 +88,8 @@ Ranking Signals: ${geminiBrief.ranking_signals}
 `
     : "";
 
+  const publishDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
   return `Generate a complete article for the following brief. Follow all directives in your system prompt exactly.
 
 ## Required Inputs (Framework Section 2)
@@ -101,6 +103,7 @@ Word Count Target: ${wordCountTarget[0]}–${wordCountTarget[1]} words
 Author Name: ${authorName}
 Author Credential: ${authorCredential}
 Tone / Brand Voice: ${brandVoice}
+Publish Date: ${publishDate}
 
 ${internalLinksSection}
 

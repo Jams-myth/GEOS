@@ -6,16 +6,18 @@ import { withRetry } from "../util/retry";
 import { logTokenUsage } from "../cost/tracker";
 import type { ParsedDraft } from "../parsing/meta-block";
 
-// 100-point YMYL/GEO Master Scorecard
+// 100-point YMYL/GEO Master Scorecard v2
+// accuracy(20) + density(15) + structural(10) + eeat(15) + entity(10) + directness(10) + consensus(10) + freshness(10) = 100
 const EditorScoresSchema = z.object({
-  accuracy_fact_checking: z.number().min(0).max(20),
-  information_density:    z.number().min(0).max(15),
-  entity_optimisation:    z.number().min(0).max(15),
-  authoritative_eeat:     z.number().min(0).max(15),
-  directness_intent:      z.number().min(0).max(15),
-  consensus_safety:       z.number().min(0).max(10),
-  source_freshness:       z.number().min(0).max(10),
-  total:                  z.number().min(0).max(100),
+  accuracy_fact_checking:        z.number().min(0).max(20),
+  information_density:           z.number().min(0).max(15),
+  structural_machine_readability: z.number().min(0).max(10),
+  authoritative_eeat:            z.number().min(0).max(15),
+  entity_optimisation:           z.number().min(0).max(10),
+  directness_intent:             z.number().min(0).max(10),
+  consensus_safety:              z.number().min(0).max(10),
+  source_freshness:              z.number().min(0).max(10),
+  total:                         z.number().min(0).max(100),
 });
 
 const HardChecksSchema = z.object({

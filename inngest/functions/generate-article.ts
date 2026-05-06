@@ -84,7 +84,9 @@ function extractInfoGainAsset(scrapes: ScrapeResult[]): string | null {
 }
 
 function countFootnotes(bodyMd: string): number {
-  return (bodyMd.match(/\[\^[0-9]+\]:/g) ?? []).length;
+  // Count HTML superscript citations: <sup><a href="#ref-n">
+  // (Markdown [^n]: syntax was deprecated in favour of HTML superscripts)
+  return (bodyMd.match(/<sup[^>]*><a\s+href="#ref-/g) ?? []).length;
 }
 
 function countTables(bodyMd: string): number {

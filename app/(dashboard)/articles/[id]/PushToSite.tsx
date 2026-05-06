@@ -9,12 +9,20 @@ interface Site {
   connected: boolean;
 }
 
+interface IndexingResult {
+  submitted: boolean;
+  jobId?: string | null;
+  status?: string | null;
+  error?: string | null;
+}
+
 interface PushResult {
   ok: boolean;
   articleUrl?: string;
   siteName?: string;
   revalidated?: boolean;
   revalidateNote?: string | null;
+  indexing?: IndexingResult;
   error?: string;
 }
 
@@ -131,28 +139,27 @@ export default function PushToSite({
           }`}
         >
           {result.ok ? (
-            <div className="space-y-1">
-              <div className="font-medium">
-                ✓ Published to {result.siteName}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-green-700">
-                <a
-                  href={result.articleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-green-900"
-                >
+            <div className="space-y-1.5">
+              <div className="font-medium">✓ Published to {result.siteName}</div>
+
+              <div className="text-xs text-green-700">
+                <a href={result.articleUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-green-900">
                   {result.articleUrl}
                 </a>
               </div>
-              {result.revalidateNote && !result.revalidated && (
-                <div className="mt-1 text-xs text-green-600 opacity-75">
-                  {result.revalidateNote}
-                </div>
-              )}
+
               {result.revalidated && (
-                <div className="text-xs text-green-600 opacity-75">
-                  Cache refreshed — article is live now.
+                <div className="text-xs text-green-600 opacity-75">✓ Cache refreshed — live now</div>
+              )}
+              {result.revalidateNote && !result.revalidated && (
+                <div className="text-xs text-green-600 opacity-75">{result.revalidateNote}</div>
+              )}
+
+              {result.indexing && (
+                <div className={`text-xs mt-1 ${result.indexing.submitted ? "text-green-600" : "text-amber-600"}`}>
+                  {result.indexing.submitted
+                    ? `✓ Submitted to SpeedyIndex — job ${result.indexing.jobId ?? "—"} (${result.indexing.status ?? "queued"})`
+                    : `⚠ SpeedyIndex: ${result.indexing.error ?? "not submitted"}`}
                 </div>
               )}
             </div>

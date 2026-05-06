@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ArticleViewer from "./ArticleViewer";
 import PushToSite from "./PushToSite";
+import RePolish from "./RePolish";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ async function getArticle(id: string) {
   const db = getDb();
   const { data, error } = await db
     .from("articles")
-    .select("id, title, slug, primary_keyword, secondary_keywords, meta_title, meta_description, schema_type, body_md, status, published_at, url, version, site_id")
+    .select("id, title, slug, primary_keyword, secondary_keywords, meta_title, meta_description, schema_type, body_md, status, published_at, url, version, site_id, generation_scores_jsonb, indexing_jobs_jsonb")
     .eq("id", id)
     .single();
 
@@ -69,6 +70,50 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
           currentSiteId={(article as { site_id?: string | null }).site_id ?? null}
           sites={sites}
         />
+      </div>
+
+      {/* Re-Polish & Re-Score */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="text-xs text-gray-400 uppercase tracking-wide mb-3">Re-Polish &amp; Re-Score</div>
+        <RePolish articleId={article.id} />
+      </div>
+
+      {/* Indexing status */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="text-xs text-gray-400 uppercase tracking-wide mb-3">Search Engine Indexing</div>
+        {(() => {
+          type IndexingJob = { adapter: string; jobId: string; status: string; submittedAt?: string };
+          const raw = article.indexing_jobs_jsonb;
+          const jobs: IndexingJob[] = Array.isArray(raw) ? (raw as IndexingJob[]) : [];
+          if (jobs.length === 0) {
+            return <p className="text-sm text-gray-400">Not yet submitted. Push to site to trigger SpeedyIndex submission.</p>;
+          }
+          return (
+            <div className="space-y-2">
+              {jobs.map((job, i) => (
+                <div key={i} className="flex items-center gap-3 text-sm">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-green-700">
+                    <span className="h-2 w-2 rounded-full bg-green-500" />
+                    Submitted to SpeedyIndex
+                  </span>
+                  <span className="text-gray-400 font-mono text-xs">job {job.jobId}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    job.status === "submitted" || job.status === "ok"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {job.status}
+                  </span>
+                  {job.submittedAt && (
+                    <span className="text-xs text-gray-400 ml-auto">
+                      {new Date(job.submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Meta */}

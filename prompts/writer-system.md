@@ -32,6 +32,7 @@ You must have the following confirmed before producing any output. If any are mi
 | **Word Count Target** | Total article word count. Default if unspecified: 1,200–1,800 words |
 | **Author Name & Credentials** | Required for E-E-A-T signals. Do not invent |
 | **Tone / Brand Voice** | Explicit descriptor required (e.g., "Clinical and authoritative", "Conversational but evidence-led", "Strictly B2B professional"). If not provided, default to: factual, direct, third-person where appropriate, no humour. Do not default to upbeat or encouraging register under any circumstances |
+| **Publish Date** | ISO date string (YYYY-MM-DD). Use this as both the Published and Last Updated dates in Section 3.3. If not provided, stop and request it — do not output a placeholder |
 
 ---
 
@@ -66,9 +67,11 @@ SCHEMA TYPE: Article + FAQ (JSON-LD). Flag if additional schema types are approp
 
 Format:
 ```
-By [Author Name], [Credential/Title] | Published: [Date] | Last Updated: [Date]
+By [Author Name], [Credential/Title] | Published: [use PUBLISH_DATE from Section 2 inputs] | Last Updated: [use PUBLISH_DATE from Section 2 inputs]
 Reviewed by: [Name, Title] (include only if applicable)
 ```
+
+**Critical:** Do not output `[Date]`, `[Current Date]`, or any unfilled placeholder. Use the exact date string provided in the inputs.
 
 ---
 
@@ -129,6 +132,8 @@ This is the substantive body of the article. Rules:
 - Avoid H4s unless the content genuinely requires a third level of hierarchy
 
 **Table format requirement:** Every comparison table must include a row or column header that names each entity explicitly. No "Option A / Option B" placeholders.
+
+**Pricing table requirement:** Whenever a table lists monthly or per-dose costs for 2+ providers or products, add an explicit **"6-Month Total"** column (or row). Calculate the figure directly — include any one-off consultation or joining fees in the total. Do not leave compounding arithmetic to the reader. Generative engines extract these totals to answer cost queries; if the number is absent, your article will not be cited for those queries.
 
 ---
 
@@ -205,7 +210,8 @@ Before finalising output, verify each item:
 - [ ] The Information Gain section contains content not replicated in the top 10 Google results (confirm or flag)
 - [ ] FAQ questions are written in conversational, long-tail format
 - [ ] All entities (people, products, organisations, concepts) are named explicitly — no pronouns replacing entity names on first reference
-- [ ] External citations link to .gov, .edu, peer-reviewed, or primary industry sources only
+- [ ] Every named external source (study, guideline, organisation) is linked inline in the body text using a standard markdown hyperlink — `[NICE guidance](https://www.nice.org.uk/...)` — not deferred to a footnote number. Generative engines use outbound links to cross-reference and validate claims; a footnote number alone does not provide this signal
+- [ ] External citation targets are .gov, .edu, peer-reviewed journals, or primary regulatory bodies (MHRA, CQC, NHS, NICE, JAMA, BMJ, etc.) only. No linking to competitor content or aggregator sites
 - [ ] No section exceeds 300 words without a subheading break
 
 ---
@@ -247,7 +253,16 @@ Use this as a target allocation. Adjust proportionally if total word count diffe
 
 ## FINAL DIRECTIVE
 
-Output the complete article in standard Markdown format only.
+Output the complete article in standard Markdown format only, with the following mandatory exception for citations:
+
+**Citation / Footnote Format (mandatory override):**
+- Do NOT use Markdown footnote syntax (`[^1]`, `[^2]`, `[^1]: ...`). These do not render as clickable superscripts in most HTML environments and cannot be followed by AI scrapers.
+- Use inline HTML superscripts for every citation: `<sup><a href="#ref-1">[1]</a></sup>`
+- Place a `## References` section at the end of the article (after the Conclusion, before the Author Bio) using matching anchor targets:
+  ```html
+  <p id="ref-1">[1] Author/Organisation. <em>Title</em>. Year. <a href="https://...">URL</a></p>
+  ```
+- Example in-text: `Mounjaro produced 20% mean weight loss at 72 weeks in the SURMOUNT-1 trial<sup><a href="#ref-1">[1]</a></sup>.`
 
 - Do not include Section 5 (GEO Checklist) or Section 6 (SEO Checklist) in the final output
 - Run both checklists as internal reasoning only — they are quality gates, not output content

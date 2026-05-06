@@ -15,17 +15,18 @@ interface GenerationScores {
   total?: number;
   accuracy_fact_checking?: number;
   information_density?: number;
-  entity_optimisation?: number;
+  structural_machine_readability?: number;
   authoritative_eeat?: number;
+  entity_optimisation?: number;
   directness_intent?: number;
   consensus_safety?: number;
   source_freshness?: number;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  draft:     { label: "Ready to Review", className: "bg-amber-100 text-amber-700" },
-  published: { label: "Live",            className: "bg-green-100 text-green-700" },
-  skipped:   { label: "Skipped",         className: "bg-gray-100 text-gray-500" },
+  draft:     { label: "Review",      className: "bg-amber-100 text-amber-700" },
+  published: { label: "Live",        className: "bg-green-100 text-green-700" },
+  skipped:   { label: "Skipped",     className: "bg-gray-100 text-gray-500" },
   manual_review_required: { label: "Needs Review", className: "bg-red-100 text-red-600" },
 };
 
@@ -50,9 +51,10 @@ function ScoreBadge({ scores }: { scores: GenerationScores | null }) {
   const title = scores ? [
     `Accuracy: ${scores.accuracy_fact_checking ?? "—"}/20`,
     `Density: ${scores.information_density ?? "—"}/15`,
-    `Entities: ${scores.entity_optimisation ?? "—"}/15`,
+    `Structure: ${scores.structural_machine_readability ?? "—"}/10`,
     `E-E-A-T: ${scores.authoritative_eeat ?? "—"}/15`,
-    `Directness: ${scores.directness_intent ?? "—"}/15`,
+    `Entities: ${scores.entity_optimisation ?? "—"}/10`,
+    `Directness: ${scores.directness_intent ?? "—"}/10`,
     `Safety: ${scores.consensus_safety ?? "—"}/10`,
     `Freshness: ${scores.source_freshness ?? "—"}/10`,
   ].join(" · ") : "";
@@ -92,21 +94,23 @@ async function getArticles() {
     });
   }
 
-  return articles.map((article) => {
-    const assessment = latestMap.get(article.id);
-    const citedCount = assessment
-      ? [assessment.citations.perplexity, assessment.citations.openai, assessment.citations.gemini].filter(
-          (c) => c?.cited
-        ).length
-      : null;
+  return articles
+    .map((article) => {
+      const assessment = latestMap.get(article.id);
+      const citedCount = assessment
+        ? [assessment.citations.perplexity, assessment.citations.openai, assessment.citations.gemini].filter(
+            (c) => c?.cited
+          ).length
+        : null;
 
-    return {
-      ...article,
-      position: assessment?.serp?.position ?? null,
-      citedCount,
-      scores: (article.generation_scores_jsonb as GenerationScores | null),
-    };
-  });
+      return {
+        ...article,
+        position: assessment?.serp?.position ?? null,
+        citedCount,
+        scores: (article.generation_scores_jsonb as GenerationScores | null),
+      };
+    })
+    .filter((article) => article.scores?.total != null);
 }
 
 function fmtDate(iso: string | null) {
@@ -127,7 +131,7 @@ export default async function ArticlesPage() {
         <div className="flex gap-4 text-sm text-gray-500">
           <span>{articles.length} total</span>
           <span className="text-green-600 font-medium">{liveCount} live</span>
-          <span className="text-amber-600 font-medium">{draftCount} ready to review</span>
+          <span className="text-amber-600 font-medium">{draftCount} to review</span>
         </div>
       </div>
 
@@ -156,19 +160,9 @@ export default async function ArticlesPage() {
             {articles.map((article) => (
               <tr key={article.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-5 py-3">
-                  <Link href={`/articles/${article.id}`} className="font-medium text-indigo-600 hover:underline leading-tight block">
+                  <Link href={`/articles/${article.id}`} className="font-medium text-indigo-600 hover:underline leading-tight">
                     {article.title}
                   </Link>
-                  {article.url && article.status === "published" && (
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-gray-400 hover:underline"
-                    >
-                      {article.url}
-                    </a>
-                  )}
                 </td>
                 <td className="px-5 py-3 text-gray-600">{article.primary_keyword ?? "—"}</td>
                 <td className="px-5 py-3 text-right">

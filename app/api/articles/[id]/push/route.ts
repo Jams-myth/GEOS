@@ -2,6 +2,8 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "../../../../../lib/db/client";
+import { submitToSpeedyIndex } from "../../../../../lib/indexing/speedyindex";
+import type { Json } from "../../../../../lib/db/types";
 
 interface VercelConfig {
   revalidate_url?: string;
@@ -71,7 +73,35 @@ export async function POST(
     return NextResponse.json({ error: `Failed to update article: ${updateError.message}` }, { status: 500 });
   }
 
-  // Attempt ISR revalidation on the target site
+  // ── SpeedyIndex submission ────────────────────────────────────────────────
+  let indexingJobId: string | null = null;
+  let indexingStatus: string | null = null;
+  let indexingError: string | null = null;
+
+  const speedyKey = process.env.SPEEDYINDEX_API_KEY;
+  if (speedyKey && !speedyKey.startsWith("<")) {
+    try {
+      const result = await submitToSpeedyIndex(articleUrl);
+      indexingJobId = result.jobId;
+      indexingStatus = result.status;
+
+      // Persist so the admin can see it on the article detail page
+      await db
+        .from("articles")
+        .update({
+          indexing_jobs_jsonb: [
+            { adapter: "speedyindex", jobId: result.jobId, status: result.status, submittedAt: new Date().toISOString() },
+          ] as unknown as Json,
+        })
+        .eq("id", id);
+    } catch (err) {
+      indexingError = err instanceof Error ? err.message : "SpeedyIndex submission failed";
+    }
+  } else {
+    indexingError = "SPEEDYINDEX_API_KEY not configured";
+  }
+
+  // ── ISR revalidation ──────────────────────────────────────────────────────
   let revalidated = false;
   let revalidateError: string | null = null;
 
@@ -111,5 +141,11 @@ export async function POST(
     siteName: site.name,
     revalidated,
     revalidateNote: revalidateError,
+    indexing: {
+      submitted: !!indexingJobId,
+      jobId: indexingJobId,
+      status: indexingStatus,
+      error: indexingError,
+    },
   });
 }
