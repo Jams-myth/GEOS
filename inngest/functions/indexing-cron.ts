@@ -49,7 +49,7 @@ export const indexingCron = inngest.createFunction(
     retries: 1,
   },
   { cron: "0 8 * * *" }, // 08:00 UTC daily
-  async ({ step, logger }) => {
+  async ({ step }) => {
     // ── 1. Fetch all published articles with a URL ──────────────────────────
     const articles: ArticleRow[] = await step.run("fetch-published-articles", async () => {
       const db = getDb();
@@ -63,7 +63,7 @@ export const indexingCron = inngest.createFunction(
       return (data ?? []) as ArticleRow[];
     });
 
-    logger.info(`indexing-cron: processing ${articles.length} published articles`);
+    console.log(`indexing-cron: processing ${articles.length} published articles`);
 
     const counts = { skipped: 0, submitted: 0, polled: 0, indexed: 0, failed: 0, errors: 0 };
 
@@ -97,10 +97,10 @@ export const indexingCron = inngest.createFunction(
               .update({ indexing_jobs_jsonb: [...jobs, newJob] })
               .eq("id", article.id);
             counts.submitted++;
-            logger.info(`indexing-cron: submitted ${article.url} → job ${jobId}`);
+            console.log(`indexing-cron: submitted ${article.url} → job ${jobId}`);
           } catch (err) {
             counts.errors++;
-            logger.error(`indexing-cron: submit failed for ${article.url}: ${String(err)}`);
+            console.error(`indexing-cron: submit failed for ${article.url}: ${String(err)}`);
           }
           return;
         }
@@ -131,23 +131,23 @@ export const indexingCron = inngest.createFunction(
 
             if (newStatus === "indexed") {
               counts.indexed++;
-              logger.info(`indexing-cron: confirmed indexed ${article.url}`);
+              console.log(`indexing-cron: confirmed indexed ${article.url}`);
             } else if (newStatus === "failed") {
               counts.failed++;
-              logger.warn(`indexing-cron: SpeedyIndex reported failed for ${article.url}`);
+              console.warn(`indexing-cron: SpeedyIndex reported failed for ${article.url}`);
             } else {
               counts.polled++;
-              logger.info(`indexing-cron: polled ${article.url} → still ${newStatus}`);
+              console.log(`indexing-cron: polled ${article.url} → still ${newStatus}`);
             }
           } catch (err) {
             counts.errors++;
-            logger.error(`indexing-cron: poll failed for ${article.url}: ${String(err)}`);
+            console.error(`indexing-cron: poll failed for ${article.url}: ${String(err)}`);
           }
         }
       });
     }
 
-    logger.info("indexing-cron: done", counts);
+    console.log("indexing-cron: done", counts);
     return { articles: articles.length, ...counts };
   }
 );
