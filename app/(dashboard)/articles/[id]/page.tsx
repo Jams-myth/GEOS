@@ -6,6 +6,7 @@ import PushToSite from "./PushToSite";
 import RePolish from "./RePolish";
 import Regenerate from "./Regenerate";
 import IndexingStatus from "./IndexingStatus";
+import ArchiveButton from "./ArchiveButton";
 
 export const dynamic = "force-dynamic";
 
@@ -55,13 +56,17 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
 
       <div className="flex items-start justify-between gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{article.title}</h1>
-        <span className={`shrink-0 inline-block text-xs px-2 py-1 rounded-full font-medium ${
-          article.status === "published" ? "bg-green-100 text-green-700"
-          : article.status === "draft" ? "bg-yellow-100 text-yellow-700"
-          : "bg-gray-100 text-gray-600"
-        }`}>
-          {article.status}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className={`inline-block text-xs px-2 py-1 rounded-full font-medium ${
+            article.status === "published" ? "bg-green-100 text-green-700"
+            : article.status === "draft" ? "bg-yellow-100 text-yellow-700"
+            : article.status === "archived" ? "bg-gray-100 text-gray-400"
+            : "bg-gray-100 text-gray-600"
+          }`}>
+            {article.status}
+          </span>
+          <ArchiveButton articleId={article.id} currentStatus={article.status ?? "draft"} />
+        </div>
       </div>
 
       {/* Push to site */}

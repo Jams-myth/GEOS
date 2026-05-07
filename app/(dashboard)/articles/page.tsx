@@ -75,6 +75,7 @@ async function getArticles() {
   const { data: articles } = await db
     .from("articles")
     .select("id, title, primary_keyword, status, published_at, created_at, url, generation_scores_jsonb")
+    .neq("status", "archived")
     .order("created_at", { ascending: false });
 
   if (!articles || articles.length === 0) return [];
